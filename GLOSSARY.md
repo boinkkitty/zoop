@@ -18,6 +18,10 @@ _Avoid_: Note, entry, post
 A calendar date in the user's timezone. Each user's first Day is the date they signed up.
 _Avoid_: Date (when meaning the journaling unit)
 
+**Written Day**:
+A Day on which at least one Page has some text. A Page that has been emptied doesn't count. Days that aren't Written Days appear faded in the rail.
+_Avoid_: Active day, entry day
+
 **Grace Window**:
 The first 2 hours after midnight, during which the previous Day's Pages can still be written.
 _Avoid_: Late period, buffer
@@ -34,3 +38,7 @@ _Avoid_: Date chip, bar
 
 **Free User / Premium User**:
 Free Users can write only today's Pages (plus the previous Day's Pages during the Grace Window). Premium Users can edit past Pages and see edit history (not in v1).
+
+**Deactivated Account**:
+An account its user has closed. Its journal is hidden at once and erased within a year. It can't be signed into, and its email can't sign up again.
+_Avoid_: Deleted account, closed account

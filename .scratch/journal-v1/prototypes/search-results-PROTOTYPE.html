@@ -1,0 +1,609 @@
+<!doctype html>
+<!--
+  PROTOTYPE, throwaway. VERDICT (2026-11-25): A + H2 + blue matches + Title on + dates searched as text; see the ticket's Answer.
+  Ticket: "Search results UI" (.scratch/journal-v1/issues/14-search-results-ui.md)
+  Built on the winner of island-rail-PROTOTYPE.html (R4: newest first, sticky month headers, Spring hover, D1 drawer).
+  The scrubber is drawn but not interactive here; it isn't what this prototype is about.
+  Plan: four structurally different placements, switchable via ?variant=A|B|C|D, the ← / → keys (outside inputs) or the bottom bar.
+    A  Replace the rail: typing swaps the Island rail for a results list in the sidebar, grouped under sticky month headers.
+       Results stay while you read the opened Page; Esc clears and the rail comes back on the opened Day.
+    B  Dropdown: a popover under the search box, wider than the sidebar, overlapping the sheet. Opening a result closes it; the rail stays put.
+    C  Search page over the sheet: the sidebar box opens a panel that covers the sheet, list on the left, full Page preview on the right.
+    D  Spotlight: the sidebar box is a launcher; ⌘K opens a centred palette over everything.
+  Fake API: GET /search?q&cursor → 20 results newest first, {day, notebook, snippet:[{text, match}]}, prefix match on every word (AND).
+  Client: searches from 1 character, 200ms after typing stops, cancels the previous request. The bar counts requests sent / cancelled.
+  Bar toggles: window (wide / 760px with the D1 drawer), latency, how the opened Page shows the match (H1 flash / H2 stay / H3 scroll only),
+  and a Title line in results (not in the agreed API shape; on to judge whether it's worth adding). No persistence.
+  Try: "mum", "bike ch", "octo", "soup leek", "zebra" (no results), then ↑ ↓ ↵ Esc, ⌘K.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Zoop: Search results PROTOTYPE</title>
+<style>
+  :root {
+    --bg: #f5f5f7; --sheet: #ffffff; --ink: #1d1d1f; --ink2: #6e6e73; --ink3: #a1a1a6; --island: #0b0b0c; --blue: #0a84ff;
+    --hd: .15s; --ease: cubic-bezier(.32,1.25,.5,1); --dur: .45s; --hit: rgba(255,214,10,.42);
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: #dcdce0; color: var(--ink); overflow: hidden; }
+  #frame { position: relative; height: 100vh; margin: 0 auto; width: 100%; background: var(--bg); overflow: hidden; }
+  #frame.narrow { width: 760px; box-shadow: 0 0 0 1px #c7c7cc, 0 10px 40px rgba(0,0,0,.12); }
+  #frame.narrow::before { content: '760px window'; position: absolute; top: 6px; right: 10px; font: 500 10px system-ui; color: var(--ink3); z-index: 50; }
+  .app { display: flex; height: 100%; }
+  kbd { font: 500 10.5px system-ui; color: var(--ink3); border: 1px solid #d1d1d6; border-bottom-width: 1.5px; border-radius: 5px; padding: 0 4px; line-height: 15px; flex: none; background: transparent; }
+
+  /* ---------- sidebar ---------- */
+  .left { width: 300px; flex: none; height: 100%; display: flex; flex-direction: column; background: var(--bg); }
+  #navtop { padding: 22px 12px 6px 18px; width: 300px; }
+  .nav { display: flex; flex-direction: column; gap: 1px; }
+  .nav a { display: flex; align-items: center; gap: 10px; padding: 7px 10px; border-radius: 8px; font-size: 13.5px; color: var(--ink); cursor: pointer; white-space: nowrap; }
+  .nav a:hover { background: rgba(0,0,0,.05); }
+  .nav a.on { background: rgba(0,0,0,.07); font-weight: 600; }
+  .nav svg { color: var(--ink2); flex: none; }
+  .search { margin-top: 8px; display: flex; align-items: center; gap: 6px; background: #e8e8ed; border-radius: 9px; padding: 0 8px 0 10px; height: 30px; color: var(--ink3); font-size: 12.5px; width: 100%; border: 0; font-family: inherit; cursor: text; transition: box-shadow .15s, background .15s; }
+  .search:focus-within { background: #fff; box-shadow: 0 0 0 3px rgba(10,132,255,.25), 0 0 0 1px rgba(10,132,255,.6); }
+  .search input { border: 0; background: transparent; outline: none; font: inherit; color: var(--ink); width: 100%; min-width: 0; }
+  .search .clr { display: none; border: 0; background: #c7c7cc; color: #fff; width: 15px; height: 15px; border-radius: 50%; font-size: 11px; line-height: 15px; padding: 0; cursor: pointer; flex: none; }
+  .search.has .clr { display: block; } .search.has kbd, .search:focus-within kbd { display: none; }
+  .sbtn { text-align: left; } .sbtn span { flex: 1; }
+  .spin { display: none; width: 12px; height: 12px; border-radius: 50%; border: 1.5px solid #d1d1d6; border-top-color: var(--ink2); animation: rot .7s linear infinite; flex: none; }
+  .busy .spin { display: block; }
+  @keyframes rot { to { transform: rotate(360deg); } }
+  .navdiv { height: 1px; background: #e2e2e7; margin: 12px 4px 0; }
+  #railwrap { position: relative; flex: 1; min-height: 0; width: 300px; }
+  .rail { height: 100%; overflow-y: auto; padding: 4px 30px 110px 18px; scrollbar-width: none;
+    -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 60px), transparent 100%); mask-image: linear-gradient(to bottom, #000 calc(100% - 60px), transparent 100%); }
+  .rail::-webkit-scrollbar, .scroll::-webkit-scrollbar { display: none; }
+  .scroll { scrollbar-width: none; }
+
+  /* ---------- Islands (R4 winner) ---------- */
+  .slot { margin-bottom: 6px; }
+  .isl { position: relative; width: 100%; min-height: 28px; border-radius: 14px; background: var(--island); color: #f5f5f7; cursor: pointer; overflow: hidden;
+    transition: border-radius var(--dur) var(--ease), box-shadow .3s ease; }
+  .row0 { display: flex; align-items: center; gap: 10px; height: 28px; padding: 0 12px; font-size: 12px; white-space: nowrap; }
+  .d { font-weight: 600; font-variant-numeric: tabular-nums; min-width: 46px; }
+  .sep { width: 1px; height: 12px; background: rgba(255,255,255,.22); flex: none; }
+  .t { color: #d2d2d7; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; flex: 1; }
+  .more { display: grid; grid-template-rows: 0fr; opacity: 0; transition: grid-template-rows var(--dur) var(--ease), opacity .25s ease; }
+  .more > div { overflow: hidden; }
+  .nbrow { padding: 0 14px 10px; font-size: 12px; line-height: 1.4; }
+  .nbrow b { display: block; font-size: 10.5px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: #8e8e93; margin-bottom: 2px; }
+  .nbrow span { color: #e5e5ea; }
+  .slot:hover .isl { border-radius: 18px; box-shadow: 0 6px 16px rgba(0,0,0,.14); transition-delay: var(--hd); }
+  .slot:hover .more { grid-template-rows: 1fr; opacity: 1; transition-delay: var(--hd); }
+  .slot.empty .isl { background: #d8d8dd; color: #6e6e73; }
+  .slot.empty .t, .slot.empty .sep { display: none; }
+  .slot.sel .isl { outline: 2px solid var(--blue); outline-offset: 2px; }
+  .ph { height: 28px; border-radius: 14px; margin-bottom: 6px; background: linear-gradient(90deg, #e3e3e8 0%, #efeff3 50%, #e3e3e8 100%); background-size: 200% 100%; animation: shimmer 1.1s linear infinite; }
+  @keyframes shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+  .railend { text-align: center; font-size: 11px; color: var(--ink3); padding: 12px 0; }
+  .month { font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--ink3); padding: 14px 0 8px 12px; position: sticky; top: -4px; z-index: 2; background: var(--bg); }
+  #scrub { position: absolute; right: 4px; top: 20px; bottom: 110px; width: 22px; pointer-events: none; }
+  #scrub .tk { position: absolute; right: 2px; height: 1.5px; border-radius: 1px; background: #c7c7cc; }
+  #scrub .tk.yt { background: #8e8e93; }
+  #scrub .y { position: absolute; right: 0; transform: translateY(-50%); font-size: 9px; font-weight: 650; color: var(--ink2); background: var(--bg); padding: 1px 0; }
+
+  /* ---------- shared result rows ---------- */
+  .ri { padding: 9px 11px 10px; border-radius: 10px; cursor: pointer; position: relative; }
+  .rh { display: flex; align-items: baseline; gap: 8px; font-size: 12px; margin-bottom: 3px; white-space: nowrap; }
+  .rd { font-weight: 650; font-variant-numeric: tabular-nums; }
+  .rn { font-size: 10px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--ink3); }
+  .rt { font-size: 12.5px; font-weight: 650; margin-bottom: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .rs { font-size: 12.5px; line-height: 1.45; color: #3a3a3c; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
+  .rs mark, .pv mark, .rd mark, .head mark { background: var(--hit); color: inherit; border-radius: 3px; padding: 0 1px; font-weight: 600; }
+  html.hc-blue { --hit: rgba(10,132,255,.17); --hitcur: rgba(10,132,255,.38); }
+  html.hc-yellow { --hitcur: #ffd60a; }
+  .stale { opacity: .45; transition: opacity .15s; }
+  .rmsg { padding: 26px 12px; text-align: center; font-size: 12.5px; color: var(--ink2); line-height: 1.5; }
+  .rmsg b { display: block; color: var(--ink); font-size: 13.5px; margin-bottom: 4px; }
+  .rend { text-align: center; font-size: 11px; color: var(--ink3); padding: 12px 0 4px; }
+  .rph { height: 58px; border-radius: 10px; margin: 0 0 6px; background: linear-gradient(90deg, #ececf0 0%, #f6f6f8 50%, #ececf0 100%); background-size: 200% 100%; animation: shimmer 1.1s linear infinite; }
+
+  /* A: results replace the rail */
+  #resA { display: none; position: absolute; inset: 0; overflow-y: auto; padding: 0 12px 110px 18px; }
+  #railwrap.searching .rail, #railwrap.searching #scrub { display: none; }
+  #railwrap.searching #resA { display: block; }
+  #resA .rcap { font-size: 11px; color: var(--ink3); padding: 10px 2px 2px 11px; }
+  #resA .ri:hover { background: rgba(0,0,0,.04); }
+  #resA .ri.act { background: rgba(0,0,0,.075); }
+  #resA .ri.open::before { content: ''; position: absolute; left: 3px; top: 11px; bottom: 11px; width: 3px; border-radius: 2px; background: var(--blue); }
+  #resA .rs { -webkit-line-clamp: 3; }
+  #resA .month { padding-left: 11px; top: 0; }
+
+  /* B: dropdown */
+  #dropB { display: none; position: absolute; z-index: 30; width: 440px; max-height: 64vh; background: #fff; border-radius: 14px; box-shadow: 0 18px 50px rgba(0,0,0,.18), 0 0 0 .5px rgba(0,0,0,.1); flex-direction: column; overflow: hidden; }
+  #dropB.on { display: flex; }
+  #dropB .list { overflow-y: auto; padding: 6px; flex: 1; }
+  #dropB .ri:hover { background: #f5f5f7; } #dropB .ri.act { background: #ebebf0; }
+  #dropB .ri.open .rd::after { content: ' · open'; color: var(--blue); font-weight: 500; }
+  .foot { display: flex; gap: 14px; align-items: center; padding: 8px 14px; border-top: 1px solid #efeff2; font-size: 11px; color: var(--ink3); flex: none; }
+  .foot kbd { margin-right: 4px; }
+  .moreb { display: block; width: calc(100% - 12px); margin: 4px 6px 6px; border: 0; background: #f5f5f7; border-radius: 9px; padding: 8px; font: 500 12px system-ui; color: var(--ink); cursor: pointer; }
+  .moreb:hover { background: #ebebf0; }
+
+  /* C: search page over the sheet */
+  #panelC { display: none; position: absolute; z-index: 18; top: 0; bottom: 0; left: 300px; right: 0; padding: 24px 56px 24px 8px; background: var(--bg); }
+  .narrow #panelC { left: 0; padding-left: 64px; }
+  #panelC.on { display: block; animation: rise .22s cubic-bezier(.25,.8,.25,1); }
+  @keyframes rise { from { opacity: 0; transform: translateY(8px); } }
+  .cbox { height: 100%; max-width: 1060px; margin: 0 auto; background: #fff; border-radius: 18px; box-shadow: 0 1px 1px rgba(0,0,0,.03), 0 8px 28px rgba(0,0,0,.05); display: flex; flex-direction: column; overflow: hidden; }
+  .bigq { display: flex; align-items: center; gap: 10px; padding: 18px 22px; border-bottom: 1px solid #efeff2; color: var(--ink3); flex: none; }
+  .bigq input { flex: 1; border: 0; outline: none; font: 500 19px inherit; font-family: inherit; color: var(--ink); background: transparent; }
+  .bigq .esc { border: 0; background: #f5f5f7; border-radius: 7px; font: 500 11px system-ui; color: var(--ink2); padding: 4px 8px; cursor: pointer; }
+  .cbody { flex: 1; min-height: 0; display: grid; grid-template-columns: 340px 1fr; }
+  .narrow .cbody { grid-template-columns: 260px 1fr; }
+  .cbody .list { overflow-y: auto; padding: 8px; border-right: 1px solid #efeff2; }
+  .cbody .ri:hover { background: #f5f5f7; } .cbody .ri.act { background: #e8f1ff; }
+  .cbody .rs { -webkit-line-clamp: 3; }
+  .pv { overflow-y: auto; padding: 40px 56px 60px; position: relative; }
+  .narrow .pv { padding: 32px 28px 60px; }
+  .pv .pvh { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; margin-bottom: 26px; }
+  .pv .openb { border: 0; background: var(--ink); color: #fff; border-radius: 999px; padding: 6px 12px; font: 500 12px system-ui; cursor: pointer; white-space: nowrap; }
+  .pv .txt { font-size: 15.5px; line-height: 1.65; white-space: pre-wrap; color: #2c2c2e; }
+  .pv .txt > div:first-child.ttl { font-size: 19px; font-weight: 650; margin-bottom: 12px; color: var(--ink); }
+  .pv .txt p { margin: 0 0 .2em; }
+  .pvempty { display: flex; height: 100%; align-items: center; justify-content: center; color: var(--ink3); font-size: 13px; }
+
+  /* D: spotlight palette */
+  #modalD { display: none; position: absolute; inset: 0; z-index: 40; background: rgba(245,245,247,.55); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); }
+  #modalD.on { display: block; animation: fade .15s ease; }
+  @keyframes fade { from { opacity: 0; } }
+  .mbox { width: 640px; max-width: calc(100% - 40px); margin: 12vh auto 0; background: #fff; border-radius: 16px; box-shadow: 0 24px 70px rgba(0,0,0,.22), 0 0 0 .5px rgba(0,0,0,.1); overflow: hidden; display: flex; flex-direction: column; max-height: 72vh; animation: pop .2s cubic-bezier(.32,1.25,.5,1); }
+  @keyframes pop { from { transform: scale(.97); opacity: 0; } }
+  .mbox .list { overflow-y: auto; padding: 6px; }
+  .mbox .ri { display: grid; grid-template-columns: 118px 1fr; gap: 14px; }
+  .mbox .rh { flex-direction: column; gap: 1px; margin: 0; }
+  .mbox .ri:hover { background: #f5f5f7; } .mbox .ri.act { background: #ebebf0; }
+
+  /* ---------- narrow window: D1 drawer ---------- */
+  #hamb, #scrim { display: none; }
+  .narrow .main { padding-left: 64px; }
+  .narrow .left { position: absolute; left: 0; top: 0; bottom: 0; z-index: 20; transform: translateX(-100%); transition: transform .35s cubic-bezier(.25,.8,.25,1); box-shadow: 0 0 40px rgba(0,0,0,.18); }
+  .narrow.dopen .left { transform: none; }
+  .narrow #hamb { display: flex; position: absolute; left: 14px; top: 22px; z-index: 5; width: 34px; height: 34px; border-radius: 10px; border: 0; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.12); align-items: center; justify-content: center; cursor: pointer; }
+  .narrow #panelC #hamb2 { display: flex; }
+  .narrow.dopen #scrim { display: block; position: absolute; inset: 0; z-index: 15; background: rgba(0,0,0,.12); }
+
+  /* ---------- Page (T4, unchanged) ---------- */
+  .main { position: relative; flex: 1; height: 100%; overflow-y: auto; display: flex; justify-content: center; padding: 24px 56px 120px 8px; }
+  .sheet { position: relative; width: 100%; max-width: 860px; min-height: calc(100vh - 48px); height: max-content; background: var(--sheet); border-radius: 18px;
+    box-shadow: 0 1px 1px rgba(0,0,0,.03), 0 8px 28px rgba(0,0,0,.05); padding: 64px 140px 80px 96px; }
+  .narrow .sheet { padding: 56px 100px 80px 48px; }
+  .head { margin-bottom: 32px; }
+  .dow { font-size: 12px; font-weight: 500; color: var(--ink3); margin-bottom: 3px; display: flex; align-items: center; gap: 10px; }
+  .date { font-size: 19px; font-weight: 600; letter-spacing: -.01em; }
+  .badge { font-size: 11px; font-weight: 500; color: var(--ink2); background: var(--bg); padding: 3px 9px; border-radius: 999px; }
+  .ed { outline: none; white-space: pre-wrap; word-wrap: break-word; font-size: 17px; line-height: 1.65; min-height: 60vh; caret-color: var(--blue); }
+  .ed > div { margin-bottom: .55em; }
+  .ed > div:first-child { font-size: 21px; font-weight: 650; letter-spacing: -.015em; line-height: 1.35; margin-bottom: 14px; }
+  .ro .ed { color: #48484a; cursor: default; }
+  .notitle .ed > div:first-child { font-size: 17px; font-weight: 400; letter-spacing: 0; line-height: 1.65; margin: 0 0 .55em; }
+  .tabs { position: absolute; top: 0; bottom: 0; right: 0; width: 52px; border-left: 1px solid #efeff2; display: flex; flex-direction: column; padding-top: 64px; }
+  .tab { writing-mode: vertical-rl; padding: 16px 0; text-align: center; font-size: 11px; font-weight: 500; letter-spacing: .08em; text-transform: uppercase; color: var(--ink3); cursor: pointer; }
+  .tab:hover { color: var(--ink2); }
+  .tab.on { color: var(--ink); font-weight: 650; box-shadow: inset 2px 0 0 var(--ink); }
+  .ed mark.hit { background: transparent; color: inherit; border-radius: 3px; }
+  .H1 .ed mark.hit { animation: hitfade 3.2s ease forwards; }
+  .H1 .ed mark.hit.cur { animation-name: hitfadecur; }
+  @keyframes hitfade { 0%, 45% { background: var(--hit); } 100% { background: transparent; } }
+  @keyframes hitfadecur { 0% { background: #ffd60a; box-shadow: 0 0 0 3px #ffd60a; } 15%, 45% { background: var(--hit); box-shadow: 0 0 0 0 transparent; } 100% { background: transparent; } }
+  .H2 .ed mark.hit { background: var(--hit); }
+  .H2 .ed mark.hit.cur { background: var(--hitcur); box-shadow: 0 0 0 2px var(--hitcur); }
+  .hc-blue .hlnote { background: #e8f1ff; }
+  .hlnote { position: sticky; top: 0; margin: -40px -60px 16px auto; width: max-content; font-size: 11px; color: var(--ink2); background: #fff8d6; border-radius: 999px; padding: 4px 10px; display: flex; gap: 8px; align-items: center; z-index: 3; }
+  .hlnote button { border: 0; background: none; color: var(--ink2); font: 600 11px system-ui; cursor: pointer; padding: 0; }
+
+  /* prototype controls (not part of the design) */
+  #bar { position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%); background: rgba(30,30,32,.94); color: #fff; border-radius: 20px; white-space: nowrap; flex-wrap: wrap; justify-content: center; max-width: 94vw;
+    display: flex; align-items: center; gap: 4px; padding: 6px; font: 500 12px system-ui, sans-serif; box-shadow: 0 6px 24px rgba(0,0,0,.3); z-index: 99; }
+  #bar span { padding: 0 8px; color: #8e8e93; }
+  #bar button { background: #3a3a3c; color: #fff; border: 0; border-radius: 999px; padding: 7px 11px; cursor: pointer; font: inherit; }
+  #bar #vn { background: #fff; color: #000; font-weight: 650; }
+</style>
+</head>
+<body>
+<div id="frame"><div class="app" id="app">
+  <aside class="left"><div id="navtop"></div>
+    <div id="railwrap"><nav class="rail" id="rail"></nav><div id="scrub"></div><div id="resA" class="scroll"></div></div></aside>
+  <main class="main" id="main"></main>
+  <div id="scrim"></div>
+  <div id="dropB"></div>
+  <div id="panelC"></div>
+  <div id="modalD"></div>
+</div></div>
+<div id="bar"><span>PROTOTYPE</span><button id="prev">←</button><button id="vn"></button><button id="next">→</button>
+  <button id="narrow"></button><button id="lat"></button><button id="hlm"></button><button id="ttl"></button><button id="hcol"></button><span id="ld"></span></div>
+<script>
+// ----- fake journal: signup 8 Jan 2024 → today 25 Nov 2026 -----
+const TODAY = new Date(2026, 10, 25), SIGNUP = new Date(2024, 0, 8);
+const NBS = ['My Journal', 'I Learned'];
+const TITLES = ['Finally fixed the bike chain', 'Rain all day', 'Long call with Mum', 'First frost', 'Shipped the thing', "Couldn't sleep", 'Swim', 'Sunday market',
+  'Train to Leeds', 'Garden, finally', 'Tom came round', 'A slow Monday', 'Soup weather', 'Dentist, then cake', 'Back on the bike', 'Quiet one', 'Moved the desk',
+  'Birthday dinner', 'Ran in the dark', 'Library afternoon', 'Fog on the river', 'Painted the hallway', 'Lost my keys again', 'Good news from Mum'];
+const SENT = ['Spent most of the morning with grease up to my elbows.', 'It turned out the derailleur was bent, not the chain.', 'Walked to the market after and bought too many clementines.',
+  'Stayed in and read most of the afternoon.', 'Made soup from whatever was left in the fridge, which was mostly leeks.', 'Mum is thinking about selling the house.',
+  'I said nothing useful but listened, which seemed to be the point.', 'The car windscreen was white at seven, so I scraped it with a library card.',
+  'Three weeks of work went out at 4pm and nobody noticed, which is the best possible outcome.', 'Up at 3 making a list of everything I have been putting off.',
+  'Forty lengths at the pool, slower than last week.', 'The lane next to me had a man doing butterfly very slowly, like a sad dolphin.', 'Tom brought a bottle of wine and stayed too late.',
+  'The train was delayed outside Doncaster for forty minutes.', 'Planted the tulip bulbs along the back fence.', 'Coffee with Priya, who is moving to Lisbon in spring.',
+  'Rode the bike to work for the first time since August.', 'Finished the octopus book; the last chapter was the best.', 'It rained so hard the gutter overflowed onto the step.',
+  'Called Mum about Christmas plans and we argued about the turkey again.', 'Fixed the squeaky door with a bit of olive oil.', 'Read in the bath until the water went cold.',
+  'Ran along the river in the dark with a head torch.', 'The office was empty, so I got more done than all week.', 'Ate a whole leek and potato pie, no regrets.',
+  'My knee hurts after the run, need to stretch more.', 'Wrote three pages of the journal before breakfast, which felt good.', 'Bought a new chain for the bike, just in case.',
+  'The fog sat on the river until noon.', 'Spent an hour looking for my keys; they were in the fridge.', 'Watched the swifts over the allotment for ages.',
+  'Mum sent a photo of the cat asleep in the fruit bowl.', 'Booked train tickets to see Gran in March.', 'Tried a new soup recipe with lentils and smoked paprika.'];
+const LEARN = ['to_tsquery with :* matches prefixes, so "jour:*" finds journal and journey.', 'Leeks need washing twice: grit hides between the layers near the root.',
+  'Octopuses taste with their arms.', 'chi middleware is just func(http.Handler) http.Handler.', 'The Dynamic Island animates with a spring, not an ease curve.',
+  'A bike chain stretches about 0.5% before it needs replacing.', 'Swifts can stay airborne for ten months without landing.', 'Olive oil works on hinges but attracts dust.',
+  'Tulip bulbs want planting after the first frost.', 'Postgres GIN indexes are slow to update but fast to read.', 'Smoked paprika is called pimentón in Spain.',
+  'The Leeds to London line opened in 1849.', 'Sea otters hold hands while they sleep.', 'Butterfly is the second fastest swimming stroke.'];
+const hsh = (i, s) => (Math.imul(i + 1, 2654435761) ^ Math.imul(s + 7, 40503)) >>> 0;
+const mk = d => d.getFullYear() * 12 + d.getMonth();
+const days = [], byMonth = {};
+for (let d = new Date(TODAY), i = 0; d >= SIGNUP; d.setDate(d.getDate() - 1), i++) {
+  const r = hsh(i, 1) % 13, has = i < 2 || r > 3, hasL = has && r % 3 !== 0;
+  let jt = '', lt = '';
+  if (has) {
+    const n = 2 + hsh(i, 3) % 11, s = []; for (let k = 0; k < n; k++) s.push(SENT[hsh(i, 10 + k) % SENT.length]);
+    const paras = []; for (let k = 0; k < s.length; k += 2 + (k % 2)) paras.push(s.slice(k, k + 2 + (k % 2)).join(' '));
+    jt = [TITLES[hsh(i, 2) % TITLES.length], ...paras].join('\n');
+  }
+  if (hasL) lt = 'Today I learned\n' + LEARN[hsh(i, 4) % LEARN.length] + (hsh(i, 5) % 2 ? '\n' + LEARN[hsh(i, 6) % LEARN.length] : '');
+  const day = { date: new Date(d), i, k: mk(d), pages: { 'My Journal': jt, 'I Learned': lt } };
+  days.push(day); (byMonth[day.k] ||= []).push(day);
+}
+const MONTHS = Object.keys(byMonth).map(Number).sort((a, b) => b - a);
+
+// ----- fake search API: prefix match on every term (AND), newest Day first, 20 per page -----
+const WRE = /[\p{L}\p{N}']+/gu;
+const tok = q => (q.toLowerCase().match(WRE) || []);
+const MON = ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'];
+const WD = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+const dateWords = d => [WD[d.getDay()], String(d.getDate()), MON[d.getMonth()], String(d.getFullYear())]; // the Day's date, searchable like text
+function dateHTML(d, terms, o) { // a date label with the matching words marked
+  return fmt(d, o).replace(WRE, w => terms.length && hits(w, terms) ? `<mark>${w}</mark>` : w);
+}
+const hits = (w, terms) => terms.some(t => w.toLowerCase().startsWith(t));
+let cacheQ = null, cacheAll = [];
+function search(q, cursor) {
+  const terms = tok(q);
+  if (q !== cacheQ) {
+    cacheQ = q; cacheAll = [];
+    for (const day of days) for (const nb of NBS) {
+      const text = day.pages[nb]; if (!text) continue;
+      const ws = [...(text.toLowerCase().match(WRE) || []), ...dateWords(day.date)];
+      if (terms.every(t => ws.some(w => w.startsWith(t)))) cacheAll.push({ i: day.i, nb, snip: snippet(text, terms) });
+    }
+  }
+  const items = cacheAll.slice(cursor, cursor + 20);
+  return { items, next: cursor + 20 < cacheAll.length ? cursor + 20 : null, total: cacheAll.length };
+}
+function snippet(text, terms) { // like ts_headline: ~28 words around the first match, segments {text, match}
+  const flat = text.replace(/\n/g, ' · '), toks = [...flat.matchAll(WRE)];
+  const first = Math.max(0, toks.findIndex(m => hits(m[0], terms)));
+  const a = Math.max(0, first - 7), b = Math.min(toks.length, a + 28), seg = [];
+  if (a > 0) seg.push({ text: '…', match: false });
+  let pos = toks[a].index;
+  for (let j = a; j < b; j++) {
+    const m = toks[j]; if (m.index > pos) seg.push({ text: flat.slice(pos, m.index), match: false });
+    seg.push({ text: m[0], match: hits(m[0], terms) }); pos = m.index + m[0].length;
+  }
+  seg.push({ text: b < toks.length ? ' …' : flat.slice(pos), match: false });
+  return seg;
+}
+
+// ----- state -----
+const V = { A: 'Replace the rail', B: 'Dropdown', C: 'Search page over the sheet', D: 'Spotlight ⌘K' }, VK = Object.keys(V);
+const BATCH = 40, LATS = [80, 400, 1500], HLM = { H1: 'flash, then fade', H2: 'stay until you type or Esc', H3: 'scroll only' };
+const qv = new URLSearchParams(location.search).get('variant');
+const S = { v: VK.includes(qv) ? qv : 'A', from: 0, loaded: BATCH, sel: 0, nb: 'My Journal', narrow: false, dopen: false,
+  q: '', res: [], next: null, total: 0, loading: false, active: 0, openKey: null, lat: 400, hlm: 'H2', title: true, hc: 'blue',
+  sent: 0, cancelled: 0, bOpen: false, cOpen: false, mOpen: false, hl: null };
+let seq = 0, tmr = null, pend = null;
+
+const fmt = (d, o) => d.toLocaleDateString('en-GB', o);
+const esc = s => s.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+const title = day => day.pages['My Journal'].split('\n')[0];
+const written = day => NBS.some(n => day.pages[n]);
+const glimpse = t => { const s = t.replace(/\n/g, ' · '); return s.length > 80 ? s.slice(0, 80).trimEnd() + '…' : s; };
+const mname = (k, o = { month: 'long', year: 'numeric' }) => fmt(new Date(Math.floor(k / 12), k % 12, 1), o);
+const dayLabel = (day, withMonth) => day.i === 0 ? 'Today' : day.i === 1 ? 'Yesterday' :
+  fmt(day.date, withMonth ? { weekday: 'short', day: 'numeric', month: 'short', ...(day.date.getFullYear() !== TODAY.getFullYear() ? { year: 'numeric' } : {}) } : { weekday: 'short', day: 'numeric' });
+const segHTML = seg => seg.map(s => s.match ? `<mark>${esc(s.text)}</mark>` : esc(s.text)).join('');
+const markLine = (line, terms, first) => { // wrap matching words of one line in <mark class="hit">
+  let out = '', pos = 0;
+  for (const m of line.matchAll(WRE)) {
+    out += esc(line.slice(pos, m.index));
+    out += terms.length && hits(m[0], terms) ? `<mark class="hit${first.done ? '' : ' cur'}">${esc(m[0])}</mark>` + ((first.done = true), '') : esc(m[0]);
+    pos = m.index + m[0].length;
+  }
+  return out + esc(line.slice(pos));
+};
+
+// ----- rail -----
+function island(day) {
+  const filled = NBS.filter(n => day.pages[n]);
+  return `<div class="slot ${filled.length ? '' : 'empty'} ${day.i === S.sel ? 'sel' : ''}" data-i="${day.i}"><div class="isl">
+    <div class="row0"><span class="d">${dayLabel(day)}</span><span class="sep"></span><span class="t">${esc(title(day))}</span></div>
+    <div class="more"><div>${filled.map(n => `<div class="nbrow"><b>${n}</b><span>${esc(glimpse(day.pages[n]))}</span></div>`).join('')}</div></div>
+  </div></div>`;
+}
+let io = null;
+function renderRail(center) {
+  const rail = document.getElementById('rail'), st = rail.scrollTop;
+  let html = S.from > 0 ? `<div id="sentTop">${'<div class="ph"></div>'.repeat(3)}</div>` : '', month = null;
+  for (const day of days.slice(S.from, S.loaded)) { if (day.k !== month) { html += `<div class="month">${mname(day.k)}</div>`; month = day.k; } html += island(day); }
+  html += S.loaded < days.length ? `<div id="sentBot">${'<div class="ph"></div>'.repeat(3)}</div>` : `<div class="railend">You started here · ${fmt(SIGNUP, { day: 'numeric', month: 'long', year: 'numeric' })}</div>`;
+  rail.innerHTML = html; rail.scrollTop = st;
+  if (center) rail.querySelector('.slot.sel')?.scrollIntoView({ block: 'center' });
+  io?.disconnect();
+  io = new IntersectionObserver(es => {
+    const e = es.find(x => x.isIntersecting); if (!e) return; io.disconnect();
+    setTimeout(() => { // pretend rail page fetch
+      if (e.target.id === 'sentTop') { const fb = rail.scrollHeight - rail.scrollTop; S.from = Math.max(0, S.from - BATCH); renderRail(); rail.scrollTop = rail.scrollHeight - fb; }
+      else { S.loaded += BATCH; renderRail(); }
+      updateBar();
+    }, 300);
+  }, { root: rail, rootMargin: '200px' });
+  ['sentTop', 'sentBot'].forEach(id => { const el = document.getElementById(id); if (el) io.observe(el); });
+}
+function renderScrub() { // static S3 look only
+  const el = document.getElementById('scrub'), H = el.clientHeight, cut = (TODAY.getFullYear() - 1) * 12;
+  const items = [...MONTHS.filter(k => k >= cut).map(k => ({ k })), ...[...new Set(MONTHS.map(k => Math.floor(k / 12)))].filter(y => y * 12 < cut).map(y => ({ y }))];
+  const slot = Math.min(18, H / items.length); let h = '';
+  items.forEach((it, j) => {
+    const t = j * slot + slot / 2;
+    if (it.y) { h += `<i class="tk yt" style="top:${j * slot}px;width:8px"></i><span class="y" style="top:${t}px">’${String(it.y).slice(2)}</span>`; return; }
+    const ys = j === 0 || Math.floor(items[j - 1].k / 12) !== Math.floor(it.k / 12), ds = byMonth[it.k];
+    h += `<i class="tk ${ys ? 'yt' : ''}" style="top:${t}px;width:${ys ? 8 : 4 + ds.filter(written).length / ds.length * 6}px"></i>`;
+    if (ys) h += `<span class="y" style="top:${t}px">’${String(Math.floor(it.k / 12)).slice(2)}</span>`;
+  });
+  el.innerHTML = h;
+}
+
+// ----- page -----
+function renderPage(scrollToHit) {
+  const day = days[S.sel], w = day.i === 0, text = day.pages[S.nb] || '';
+  const hl = S.hl && S.hl.i === day.i && S.hl.nb === S.nb ? S.hl : null, terms = hl ? hl.terms : [], first = { done: false };
+  const lines = (text ? text.split('\n') : ['']).map(l => `<div>${l ? markLine(l, terms, first) : '<br>'}</div>`).join('');
+  const note = hl && S.hlm === 'H2' ? `<div class="hlnote">Matches for “${esc(hl.q)}”<button id="hlx">Clear · Esc</button></div>` : '';
+  document.getElementById('main').innerHTML = `
+    <button id="hamb" title="Days"><svg width="16" height="16" viewBox="0 0 16 16" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M2.5 4h11M2.5 8h11M2.5 12h11"/></svg></button>
+    <div class="sheet ${w ? '' : 'ro'} ${S.nb === 'My Journal' ? '' : 'notitle'} ${S.hlm}">${note}
+      <div class="head"><div class="dow">${hl ? dateHTML(day.date, terms, { weekday: 'long' }) : fmt(day.date, { weekday: 'long' })}${day.i === 0 ? ' · Today' : ''}${w ? '' : '<span class="badge">Read only</span>'}</div>
+        <div class="date">${hl ? dateHTML(day.date, terms, { day: 'numeric', month: 'long', year: 'numeric' }) : fmt(day.date, { day: 'numeric', month: 'long', year: 'numeric' })}</div></div>
+      <div class="ed" ${w ? 'contenteditable="true" spellcheck="false"' : ''}>${lines}</div>
+      <div class="tabs">${NBS.map(n => `<div class="tab ${n === S.nb ? 'on' : ''}" data-nb="${n}">${n}</div>`).join('')}</div>
+    </div>`;
+  document.getElementById('hamb').onclick = () => { S.dopen = true; renderShell(); };
+  document.getElementById('hlx')?.addEventListener('click', clearHl);
+  document.querySelectorAll('.tab[data-nb]').forEach(t => t.onclick = () => { S.nb = t.dataset.nb; renderPage(); });
+  const ed = document.querySelector('.ed[contenteditable]');
+  if (ed) ed.oninput = () => { day.pages[S.nb] = ed.innerText.replace(/\n$/, ''); if (S.hl) { S.hl = null; ed.querySelectorAll('mark.hit').forEach(m => m.replaceWith(m.textContent)); } renderRail(); };
+  const main = document.getElementById('main');
+  if (scrollToHit) { const m = main.querySelector('mark.hit.cur'); if (m) m.scrollIntoView({ block: 'center' }); else main.scrollTop = 0; }
+  if (hl && S.hlm !== 'H2') S.hl = null; // H1 flashes once, H3 never shows; neither survives a re-render
+}
+function clearHl() { S.hl = null; renderPage(); }
+
+// ----- search client: 1 char, 200ms debounce, cancel the previous request -----
+function onQuery(q) {
+  S.q = q; clearTimeout(tmr);
+  if (pend) { clearTimeout(pend); pend = null; S.cancelled++; }
+  if (!q.trim()) { seq++; S.waiting = false; S.res = []; S.next = null; S.loading = false; S.active = 0; renderSearch(); updateBar(); return; }
+  S.waiting = true; tmr = setTimeout(() => fetchQ(q, 0), 200);
+  renderSearch();
+}
+function fetchQ(q, cursor) {
+  const my = ++seq; S.loading = true; S.sent++; renderSearch(); updateBar();
+  pend = setTimeout(() => {
+    pend = null; if (my !== seq) return;
+    const r = search(q, cursor);
+    S.res = cursor ? S.res.concat(r.items) : r.items; S.next = r.next; S.total = r.total; S.loading = false;
+    if (!cursor) { S.active = 0; S.waiting = false; }
+    renderSearch(); updateBar();
+  }, S.lat);
+}
+const loadMore = () => { if (S.next != null && !S.loading) fetchQ(S.q, S.next); };
+
+function rowHTML(r, j, withMonth) {
+  const day = days[r.i], key = r.i + '|' + r.nb, t = S.title && r.nb === 'My Journal' ? title(day) : '';
+  return `<div class="ri ${j === S.active ? 'act' : ''} ${S.openKey === key ? 'open' : ''}" data-j="${j}">
+    <div class="rh"><span class="rd">${dateWords(day.date).some(w => hits(w, tok(S.q))) ? dateHTML(day.date, tok(S.q), { weekday: 'short', day: 'numeric', month: 'long', year: 'numeric' }) : dayLabel(day, withMonth)}</span><span class="rn">${r.nb}</span></div>
+    ${t ? `<div class="rt">${esc(t)}</div>` : ''}<div class="rs">${segHTML(r.snip)}</div></div>`;
+}
+function listHTML(kind) { // kind: A (grouped by month) or B/C/D (flat, month in the label)
+  if (!S.q.trim()) return '';
+  if (!S.res.length && (S.loading || S.waiting)) return '<div class="rph"></div>'.repeat(4);
+  if (!S.res.length) return `<div class="rmsg"><b>No Pages match “${esc(S.q.trim())}”</b>Search finds whole words and the start of words, in both Notebooks.<br>Dates count as words too: “november”, “nov 2025”, “thursday”.</div>`;
+  let h = '', month = null;
+  S.res.forEach((r, j) => {
+    if (kind === 'A') { const k = days[r.i].k; if (k !== month) { h += `<div class="month">${mname(k)}</div>`; month = k; } }
+    h += rowHTML(r, j, kind !== 'A');
+  });
+  const end = S.next == null ? `<div class="rend">${S.total === 1 ? 'One Page' : S.total + ' Pages'} · that’s every match</div>` :
+    kind === 'B' ? `<button class="moreb">Show 20 more</button>` : `<div class="rmore">${'<div class="rph"></div>'.repeat(2)}</div>`;
+  return `<div class="${S.loading || S.waiting ? 'stale' : ''}">${h}</div>` + end;
+}
+let mio = null;
+function watchMore(root) {
+  mio?.disconnect(); const m = root.querySelector('.rmore'); if (!m) return;
+  mio = new IntersectionObserver(es => { if (es.some(e => e.isIntersecting)) loadMore(); }, { root, rootMargin: '150px' }); mio.observe(m);
+}
+const hint = '<div class="foot"><span><kbd>↑</kbd><kbd>↓</kbd>move</span><span><kbd>↵</kbd>open</span><span><kbd>esc</kbd>close</span><span style="margin-left:auto">Newest first</span></div>';
+
+function renderSearch() {
+  const v = S.v, box = document.querySelector('#navtop .search');
+  box.classList.toggle('has', !!S.q); box.classList.toggle('busy', S.loading);
+  const qi = document.getElementById('q'); if (qi && qi.value !== S.q) qi.value = S.q;
+  // A
+  const rw = document.getElementById('railwrap'), ra = document.getElementById('resA');
+  const aOn = v === 'A' && !!S.q.trim(); rw.classList.toggle('searching', aOn);
+  if (aOn) { const st = ra.scrollTop; ra.innerHTML = `<div class="rcap">Newest first</div>` + listHTML('A'); ra.scrollTop = st; watchMore(ra); }
+  else if (v === 'A' && rw.dataset.was === '1') renderRail(true);
+  rw.dataset.was = aOn ? '1' : '0';
+  // B
+  const dB = document.getElementById('dropB'), bOn = v === 'B' && S.bOpen && !!S.q.trim();
+  dB.classList.toggle('on', bOn);
+  if (bOn) {
+    const r = box.getBoundingClientRect(), f = document.getElementById('frame').getBoundingClientRect();
+    dB.style.left = r.left - f.left + 'px'; dB.style.top = r.bottom - f.top + 6 + 'px';
+    const st = dB.querySelector('.list')?.scrollTop || 0;
+    dB.innerHTML = `<div class="list">${listHTML('B')}</div>` + (S.res.length ? hint : '');
+    dB.querySelector('.list').scrollTop = st;
+    dB.querySelector('.moreb')?.addEventListener('click', loadMore);
+  }
+  // C
+  const pC = document.getElementById('panelC'), cOn = v === 'C' && S.cOpen;
+  pC.classList.toggle('on', cOn);
+  if (cOn) {
+    if (!pC.querySelector('#cq')) {
+      pC.innerHTML = `<div class="cbox"><div class="bigq"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="7" cy="7" r="5"/><path d="m11 11 4 4"/></svg>
+        <input id="cq" placeholder="Search every Page" autocomplete="off"><span class="spin"></span><button class="esc">Close · Esc</button></div><div class="cbody"><div class="list scroll"></div><div class="pv"></div></div></div>`;
+      wireInput(pC.querySelector('#cq')); pC.querySelector('.esc').onclick = closeAll;
+    }
+    const ci = pC.querySelector('#cq'); if (ci.value !== S.q) ci.value = S.q;
+    pC.querySelector('.bigq').classList.toggle('busy', S.loading);
+    const L = pC.querySelector('.list'), st = L.scrollTop;
+    L.innerHTML = S.q.trim() ? listHTML('C') : '<div class="rmsg"><b>Search every Page</b>Both Notebooks, newest first.<br>Prefixes work: “bik” finds bike and biking.<br>Dates count as words too: “november”, “nov 2025”, “thursday”.</div>';
+    L.scrollTop = st; watchMore(L); renderPreview();
+  }
+  // D
+  const mD = document.getElementById('modalD'), dOn = v === 'D' && S.mOpen;
+  mD.classList.toggle('on', dOn);
+  if (dOn) {
+    if (!mD.querySelector('#mq')) {
+      mD.innerHTML = `<div class="mbox"><div class="bigq"><svg width="18" height="18" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="7" cy="7" r="5"/><path d="m11 11 4 4"/></svg>
+        <input id="mq" placeholder="Search your journal" autocomplete="off"><span class="spin"></span></div><div class="list scroll"></div></div>`;
+      wireInput(mD.querySelector('#mq'));
+    }
+    const mi = mD.querySelector('#mq'); if (mi.value !== S.q) mi.value = S.q;
+    mD.querySelector('.bigq').classList.toggle('busy', S.loading);
+    const L = mD.querySelector('.list'), st = L.scrollTop;
+    L.innerHTML = S.q.trim() ? listHTML('D') : '<div class="rmsg">Type to search every Page, newest first.</div>';
+    L.scrollTop = st; watchMore(L);
+    mD.querySelector('.foot')?.remove(); if (S.res.length && S.q.trim()) mD.querySelector('.mbox').insertAdjacentHTML('beforeend', hint);
+  }
+  document.querySelector('.ri.act')?.scrollIntoView({ block: 'nearest' });
+}
+function renderPreview() {
+  const pv = document.querySelector('#panelC .pv'), r = S.res[S.active];
+  if (!r || !S.q.trim()) { pv.innerHTML = `<div class="pvempty">${S.q.trim() && !S.loading && !S.res.length ? '' : 'The selected Page shows here'}</div>`; return; }
+  const day = days[r.i], terms = tok(S.q), first = { done: false };
+  const lines = day.pages[r.nb].split('\n').map((l, n) => `<div class="${n === 0 && r.nb === 'My Journal' ? 'ttl' : ''}"><p>${markLine(l, terms, first)}</p></div>`).join('');
+  pv.innerHTML = `<div class="pvh"><div><div class="dow">${dateHTML(day.date, terms, { weekday: 'long' })} · ${r.nb}</div><div class="date">${dateHTML(day.date, terms, { day: 'numeric', month: 'long', year: 'numeric' })}</div></div>
+    <button class="openb">Open Page ↵</button></div><div class="txt">${lines}</div>`;
+  pv.querySelector('.openb').onclick = () => openRes(S.active);
+  pv.querySelector('mark')?.scrollIntoView({ block: 'center' });
+}
+
+function openRes(j) {
+  const r = S.res[j]; if (!r) return;
+  S.active = j; S.openKey = r.i + '|' + r.nb;
+  S.hl = { i: r.i, nb: r.nb, terms: tok(S.q), q: S.q };
+  S.sel = r.i; S.nb = r.nb;
+  if (r.i < S.from || r.i >= S.loaded) { S.from = Math.max(0, r.i - 8); S.loaded = S.from + BATCH; } // jump: load only around the target
+  S.bOpen = S.cOpen = S.mOpen = false; S.dopen = false;
+  document.activeElement?.blur();
+  renderShell(); renderRail(true); renderPage(true); renderSearch(); updateBar();
+  if (S.hlm === 'H3') document.querySelectorAll('.ed mark.hit').forEach(m => m.replaceWith(m.textContent));
+}
+function closeAll() { S.bOpen = S.cOpen = S.mOpen = false; document.activeElement?.blur(); renderSearch(); }
+function launch() { // ⌘K or clicking the sidebar box
+  if (S.v === 'A' || S.v === 'B') {
+    if (S.narrow) { S.dopen = true; renderShell(); }
+    const q = document.getElementById('q'); setTimeout(() => { q.focus(); q.select(); }, S.narrow ? 60 : 0);
+    if (S.v === 'B') { S.bOpen = true; renderSearch(); }
+    return;
+  }
+  S.dopen = false; renderShell();
+  if (S.v === 'C') S.cOpen = true; else S.mOpen = true;
+  renderSearch();
+  const i = document.getElementById(S.v === 'C' ? 'cq' : 'mq'); i.focus(); i.select();
+}
+function wireInput(inp) {
+  inp.addEventListener('input', () => { if (S.v === 'B') S.bOpen = true; onQuery(inp.value); });
+  inp.addEventListener('keydown', e => {
+    const n = S.res.length;
+    if (e.key === 'ArrowDown' && n) { e.preventDefault(); S.active = Math.min(n - 1, S.active + 1); if (S.active >= n - 3) loadMore(); renderSearch(); }
+    else if (e.key === 'ArrowUp' && n) { e.preventDefault(); S.active = Math.max(0, S.active - 1); renderSearch(); }
+    else if (e.key === 'Enter' && n) { e.preventDefault(); openRes(S.active); }
+    else if (e.key === 'Escape') {
+      e.preventDefault(); e.stopPropagation();
+      if (S.v === 'C' || S.v === 'D') return closeAll(); // query kept, selected again on reopen
+      if (S.q) { S.bOpen = false; onQuery(''); } else inp.blur();
+    }
+  });
+}
+
+// ----- shell -----
+function renderNav() {
+  const ic = d => `<svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round">${d}</svg>`;
+  const mag = '<svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" style="flex:none"><circle cx="7" cy="7" r="5"/><path d="m11 11 4 4"/></svg>';
+  const box = S.v === 'A' || S.v === 'B'
+    ? `<label class="search">${mag}<input id="q" placeholder="Search" autocomplete="off"><span class="spin"></span><kbd>⌘K</kbd><button class="clr" title="Clear">×</button></label>`
+    : `<button class="search sbtn">${mag}<span>${S.q ? esc(S.q) : 'Search'}</span><kbd>⌘K</kbd></button>`;
+  document.getElementById('navtop').innerHTML = `<div class="nav">
+      <a class="on">${ic('<path d="M2 7.5 8 2.5l6 5V14H10v-4H6v4H2z"/>')}Home</a>
+      <a>${ic('<circle cx="8" cy="8" r="5.5"/>')}Filler 1</a><a>${ic('<circle cx="8" cy="8" r="5.5"/>')}Filler 2</a></div>${box}<div class="navdiv"></div>`;
+  const q = document.getElementById('q');
+  if (q) { wireInput(q); q.value = S.q; q.addEventListener('focus', () => { if (S.v === 'B' && S.q) { S.bOpen = true; renderSearch(); } });
+    document.querySelector('#navtop .clr').onclick = e => { e.preventDefault(); onQuery(''); q.focus(); }; }
+  else document.querySelector('#navtop .sbtn').onclick = launch;
+}
+function renderShell() {
+  document.getElementById('frame').className = S.narrow ? 'narrow' : '';
+  document.getElementById('app').className = ['app', S.narrow ? 'narrow' : '', S.dopen ? 'dopen' : ''].join(' ');
+}
+function updateBar() {
+  document.getElementById('vn').textContent = `${S.v} · ${V[S.v]}`;
+  document.getElementById('narrow').textContent = S.narrow ? 'Window: 760px (drawer)' : 'Window: wide';
+  document.getElementById('lat').textContent = `Latency: ${S.lat}ms`;
+  document.getElementById('hlm').textContent = `Opened Page: ${S.hlm} ${HLM[S.hlm]}`;
+  document.getElementById('ttl').textContent = `Title in results: ${S.title ? 'on' : 'off'}`;
+  document.getElementById('hcol').textContent = `Match colour: ${S.hc}`;
+  document.documentElement.className = 'hc-' + S.hc;
+  document.getElementById('ld').textContent = `requests ${S.sent} · cancelled ${S.cancelled}`;
+}
+function setVariant(v) {
+  S.v = v; S.bOpen = S.cOpen = S.mOpen = false;
+  history.replaceState(null, '', '?variant=' + v);
+  ['panelC', 'modalD'].forEach(id => document.getElementById(id).innerHTML = '');
+  renderNav(); renderShell(); renderSearch(); updateBar();
+}
+const cyc = n => setVariant(VK[(VK.indexOf(S.v) + n + VK.length) % VK.length]);
+document.getElementById('prev').onclick = () => cyc(-1);
+document.getElementById('next').onclick = () => cyc(1);
+document.getElementById('vn').onclick = () => cyc(1);
+document.getElementById('narrow').onclick = () => { S.narrow = !S.narrow; S.dopen = false; S.bOpen = false; renderShell(); renderSearch(); updateBar(); setTimeout(renderScrub, 50); };
+document.getElementById('lat').onclick = () => { S.lat = LATS[(LATS.indexOf(S.lat) + 1) % LATS.length]; updateBar(); };
+document.getElementById('hlm').onclick = () => { S.hlm = { H1: 'H2', H2: 'H3', H3: 'H1' }[S.hlm]; S.hl = null; renderPage(); updateBar(); };
+document.getElementById('hcol').onclick = () => { S.hc = S.hc === 'blue' ? 'yellow' : 'blue'; updateBar(); };
+document.getElementById('ttl').onclick = () => { S.title = !S.title; renderSearch(); updateBar(); };
+document.getElementById('rail').onclick = e => { const s = e.target.closest('.slot'); if (s) { S.sel = +s.dataset.i; S.hl = null; S.dopen = false; renderShell(); renderRail(); renderPage(); } };
+document.getElementById('scrim').onclick = () => { S.dopen = false; renderShell(); };
+['resA', 'dropB', 'panelC', 'modalD'].forEach(id => document.getElementById(id).addEventListener('click', e => {
+  const ri = e.target.closest('.ri');
+  if (ri) { const j = +ri.dataset.j; if (id === 'panelC') { S.active = j; renderSearch(); document.getElementById('cq').focus(); } else openRes(j); return; }
+  if (id === 'modalD' && e.target.id === 'modalD') closeAll();
+}));
+document.getElementById('panelC').addEventListener('dblclick', e => { const ri = e.target.closest('.ri'); if (ri) openRes(+ri.dataset.j); });
+document.addEventListener('pointerdown', e => {
+  if (S.v === 'B' && S.bOpen && !e.target.closest('#dropB, #navtop .search, #bar')) { S.bOpen = false; renderSearch(); }
+});
+addEventListener('keydown', e => {
+  if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); return launch(); }
+  if (e.target.closest('input, textarea, [contenteditable]')) { if (e.key === 'Escape' && S.hl) clearHl(); return; }
+  if (e.key === 'ArrowLeft') cyc(-1);
+  if (e.key === 'ArrowRight') cyc(1);
+  if (e.key === 'Escape') { if (S.hl) clearHl(); S.dopen = false; closeAll(); renderShell(); }
+});
+addEventListener('resize', renderScrub);
+renderNav(); renderRail(); renderPage(); renderScrub(); setVariant(S.v);
+</script>
+</body>
+</html>
