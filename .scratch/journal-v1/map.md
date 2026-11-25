@@ -2,6 +2,8 @@
 
 Label: wayfinder:map
 
+> **Archived 2026-11-25.** Mirrored to GitHub: the map is [issue #1](https://github.com/boinkkitty/zoop/issues/1), and tickets 01–15 are issues #2–#16. GitHub is canonical from now on.
+
 ## Destination
 
 A **v1 build spec for the Zoop web app**: product behaviour, data model, API contract, stack and hosting, decided well enough to hand straight to implementation. Done when nothing is left to decide before someone starts building v1.
