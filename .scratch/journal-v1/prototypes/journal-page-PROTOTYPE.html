@@ -1,0 +1,183 @@
+<!doctype html>
+<!--
+  PROTOTYPE — throwaway. Answers ticket "Journal page look and feel" (.scratch/journal-v1/issues/05-journal-page-prototype.md).
+  Three radically different journal-page variants, switchable via ?variant=A|B|C, ← / → keys, or the bottom bar.
+  Bottom bar also toggles: Today vs Past Day (read-only look), and 2 vs 5 Notebooks (tab room).
+  No persistence, no backend. Double-click to open.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Zoop — journal page PROTOTYPE</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,700;1,6..72,400&family=EB+Garamond:ital,wght@0,400;0,700;1,400&family=Courier+Prime:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body { font-family: system-ui, sans-serif; }
+  .ed { outline: none; white-space: pre-wrap; word-wrap: break-word; }
+  .ed > div:first-child { font-weight: 700; }
+  .ro .ed { cursor: default; }
+
+  /* ---------- Variant A: single sheet on a desk ---------- */
+  .A { min-height: 100vh; background: #e7e2d8; display: flex; justify-content: center; padding: 48px 90px 120px 24px; }
+  .A .sheet { position: relative; width: 100%; max-width: 780px; min-height: calc(100vh - 168px); background: #fff;
+    box-shadow: 0 1px 2px rgba(0,0,0,.08), 0 12px 30px rgba(60,50,30,.12); border-radius: 2px; }
+  .A .head { height: 112px; padding: 34px 48px 0 96px; display: flex; align-items: baseline; gap: 14px; border-bottom: 2px solid #e2a3a3; }
+  .A .dow { font: 400 13px/1 Newsreader, serif; letter-spacing: .18em; text-transform: uppercase; color: #8a8173; }
+  .A .date { font: 400 30px/1 Newsreader, serif; color: #2b2722; }
+  .A .margin { position: absolute; top: 0; bottom: 0; left: 76px; width: 1px; background: #e2a3a3; }
+  .A .ed { font: 400 19px/34px Newsreader, serif; color: #23201c; padding: 0 48px 68px 96px; min-height: 680px;
+    background: repeating-linear-gradient(to bottom, transparent 0 33px, #cfdcea 33px 34px); }
+  .A .tabs { position: absolute; top: 140px; right: -64px; display: flex; flex-direction: column; gap: 6px; }
+  .A .tab { width: 64px; min-height: 92px; background: #d9cba8; border-radius: 0 8px 8px 0; cursor: pointer;
+    writing-mode: vertical-rl; display: flex; align-items: center; justify-content: center;
+    font: 400 13px Newsreader, serif; letter-spacing: .06em; color: #5a4e35; box-shadow: inset 6px 0 6px -6px rgba(0,0,0,.25); }
+  .A .tab.on { width: 72px; margin-left: -8px; box-shadow: none; color: #2b2416; font-weight: 700; }
+  .A .tab.add { min-height: 40px; opacity: .55; }
+  .A .lock { position: absolute; left: 10px; top: 126px; width: 56px; font: italic 12px/1.3 Newsreader, serif; color: #a08f8f; text-align: center; }
+  .A.ro .ed { color: #5d5850; background: repeating-linear-gradient(to bottom, transparent 0 33px, #e3eaf2 33px 34px); }
+
+  /* ---------- Variant B: open two-page spread ---------- */
+  .B { min-height: 100vh; background: #3b3a37; display: flex; justify-content: center; align-items: flex-start; padding: 40px 80px 120px 40px; }
+  .B .book { position: relative; display: flex; width: 100%; max-width: 1320px; }
+  .B .pg { flex: 1; position: relative; min-height: calc(100vh - 160px); background: #fdfcf7; padding: 28px 56px 60px; }
+  .B .pg.l { border-radius: 4px 0 0 4px; background: linear-gradient(to right, #fdfcf7 85%, #ebe7da); }
+  .B .pg.r { border-radius: 0 4px 4px 0; background: linear-gradient(to left, #fdfcf7 85%, #ebe7da); }
+  .B .run { text-align: center; font: 400 13px/1 'EB Garamond', serif; letter-spacing: .22em; text-transform: uppercase; color: #8b8371;
+    padding-bottom: 14px; border-bottom: 1px solid #d8d1bf; margin-bottom: 30px; }
+  .B .run b { display: block; font: italic 400 22px/1.2 'EB Garamond', serif; letter-spacing: 0; text-transform: none; color: #2e2a22; margin-top: 6px; }
+  .B .ed { font: 400 20px/32px 'EB Garamond', serif; color: #26221b; min-height: 600px;
+    background: repeating-linear-gradient(to bottom, transparent 0 31px, #e4dfcf 31px 32px); }
+  .B .pg.past { background: linear-gradient(to right, #f6f1e2 85%, #e6dfcb); }
+  .B .pg.past .ed { color: #776d5a; }
+  .B .pg.past .run::after { content: 'written — read only'; display: block; margin-top: 8px; font-size: 10px; letter-spacing: .2em; color: #b0a689; }
+  .B .tabs { position: absolute; right: -44px; top: 70px; display: flex; flex-direction: column; gap: 4px; }
+  .B .tab { width: 44px; padding: 14px 0; background: #b9b2a0; border-radius: 0 6px 6px 0; writing-mode: vertical-rl; text-align: center; cursor: pointer;
+    font: 400 14px 'EB Garamond', serif; color: #3d382d; opacity: .8; }
+  .B .tab.on { opacity: 1; font-weight: 700; }
+  .B .tab.add { padding: 6px 0; opacity: .45; }
+  .B .ribbon { position: absolute; top: -8px; right: 110px; width: 14px; height: 120px; background: #b9b2a0; clip-path: polygon(0 0,100% 0,100% 100%,50% 88%,0 100%); }
+
+  /* ---------- Variant C: ring-binder, full-bleed, typewriter ---------- */
+  .C { min-height: 100vh; display: flex; background: #fff; }
+  .C .divider { width: 132px; flex: none; background: #c8c3b4; display: flex; flex-direction: column; padding-top: 120px; gap: 2px; position: relative; }
+  .C .tab { padding: 18px 14px 18px 18px; font: 700 13px/1.2 'Courier Prime', monospace; text-transform: uppercase; letter-spacing: .06em;
+    color: #4b473d; cursor: pointer; border-top: 1px solid rgba(0,0,0,.08); }
+  .C .tab.on { background: #fff; color: #1d1b17; margin-right: -1px; }
+  .C .tab.add { font-weight: 400; opacity: .5; }
+  .C .holes { width: 46px; flex: none; background: #fff; border-right: 1px solid #ece9e1;
+    background-image: radial-gradient(circle at 23px 50%, #c8c3b4 0 9px, transparent 10px); background-size: 46px 180px; background-position: 0 40px; }
+  .C .paper { flex: 1; position: relative; padding: 0 80px 120px 40px; }
+  .C .head { height: 128px; border-bottom: 3px double #9fb4c9; display: flex; align-items: flex-end; justify-content: space-between; padding-bottom: 16px; }
+  .C .nb { font: 400 13px 'Courier Prime', monospace; color: #8c877b; letter-spacing: .1em; text-transform: uppercase; }
+  .C .stamp { font: 700 16px/1.1 'Courier Prime', monospace; color: #b8403a; border: 2px solid #b8403a; padding: 8px 12px; transform: rotate(-3deg);
+    letter-spacing: .08em; text-align: center; opacity: .85; }
+  .C .stamp small { display: block; font-size: 11px; font-weight: 400; }
+  .C .ed { font: 400 17px/30px 'Courier Prime', monospace; color: #1f1d19; padding-top: 0; min-height: 700px; max-width: 920px;
+    background: repeating-linear-gradient(to bottom, transparent 0 29px, #dfe6ee 29px 30px); }
+  .C .filed { position: absolute; right: 120px; top: 260px; font: 700 64px 'Courier Prime', monospace; color: rgba(184,64,58,.13);
+    border: 6px solid rgba(184,64,58,.13); padding: 6px 22px; transform: rotate(-14deg); pointer-events: none; }
+  .C.ro .ed { color: #8a857a; }
+
+  /* ---------- prototype switcher (not part of the design) ---------- */
+  #bar { position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%); background: #111; color: #fff; border-radius: 999px;
+    display: flex; align-items: center; gap: 4px; padding: 6px; font: 500 13px system-ui, sans-serif; box-shadow: 0 6px 24px rgba(0,0,0,.35); z-index: 99; }
+  #bar button { background: #2a2a2a; color: #fff; border: 0; border-radius: 999px; padding: 7px 12px; cursor: pointer; font: inherit; }
+  #bar button:hover { background: #3a3a3a; }
+  #bar .lbl { padding: 0 12px; min-width: 210px; text-align: center; }
+  #bar .sep { width: 1px; height: 20px; background: #444; margin: 0 4px; }
+  #bar .state { color: #9a9a9a; font-size: 11px; padding: 0 10px; }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="bar">
+  <button id="prev">←</button><span class="lbl" id="lbl"></span><button id="next">→</button>
+  <span class="sep"></span><button id="day"></button><button id="nbs"></button>
+  <span class="state" id="state"></span>
+</div>
+<script>
+const VARIANTS = { A: 'Single sheet on a desk', B: 'Open spread (yesterday | today)', C: 'Ring binder, typewriter' };
+const KEYS = Object.keys(VARIANTS);
+const ALL_NBS = ['My Journal', 'I Learned', 'Dreams', 'Gratitude', 'Reading'];
+const TEXT = {
+  today: {
+    'My Journal': ['Finally fixed the bike chain', 'Spent most of the morning with grease up to my elbows. It turned out the derailleur was bent, not the chain.', '', 'Walked to the market after. Bought too many clementines.'],
+    'I Learned': ['Postgres prefix search', 'to_tsquery with :* matches prefixes, so "jour:*" finds journal and journey.'],
+  },
+  past: {
+    'My Journal': ['Rain all day', 'Stayed in and read. Made soup from whatever was left in the fridge, which was mostly leeks.'],
+    'I Learned': ['Leeks need washing twice', 'Grit hides between the layers near the root.'],
+  },
+};
+const qs = new URLSearchParams(location.search);
+let S = { variant: KEYS.includes(qs.get('variant')) ? qs.get('variant') : 'A', past: qs.get('day') === 'past', five: qs.get('nbs') === '5', nb: 'My Journal' };
+
+const esc = s => s.replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]);
+const lines = (when, nb) => (TEXT[when][nb] || ['']).map(l => `<div>${l ? esc(l) : '<br>'}</div>`).join('');
+const ed = (when, editable) => `<div class="ed" ${editable ? 'contenteditable="true" spellcheck="false"' : ''}>${lines(when, S.nb)}</div>`;
+const nbs = () => S.five ? ALL_NBS : ALL_NBS.slice(0, 2);
+const tabs = () => nbs().map(n => `<div class="tab ${n === S.nb ? 'on' : ''}" data-nb="${n}">${n}</div>`).join('') + `<div class="tab add" title="more Notebooks later">+</div>`;
+const day = past => past ? { dow: 'Saturday', date: '14 November 2026', short: '14 NOV 2026' } : { dow: 'Wednesday', date: '25 November 2026', short: '25 NOV 2026' };
+
+const R = {
+  A() {
+    const d = day(S.past);
+    return `<div class="A ${S.past ? 'ro' : ''}"><div class="sheet">
+      <div class="margin"></div>
+      ${S.past ? '<div class="lock">locked<br>— a past Day</div>' : ''}
+      <div class="head"><span class="dow">${d.dow}</span><span class="date">${d.date}</span></div>
+      ${ed(S.past ? 'past' : 'today', !S.past)}
+      <div class="tabs">${tabs()}</div>
+    </div></div>`;
+  },
+  B() {
+    // left page = the previous Day (always read-only); right page = the Day being viewed
+    const left = S.past ? { dow: 'Friday', date: '13 November 2026' } : { dow: 'Tuesday', date: '24 November 2026' };
+    const right = day(S.past);
+    return `<div class="B"><div class="book">
+      <div class="pg l past"><div class="run">${left.dow}<b>${left.date}</b></div>${ed('past', false)}</div>
+      <div class="pg r ${S.past ? 'past' : ''}"><div class="ribbon"></div><div class="run">${right.dow}<b>${right.date}</b></div>${ed(S.past ? 'past' : 'today', !S.past)}
+        <div class="tabs">${tabs()}</div></div>
+    </div></div>`;
+  },
+  C() {
+    const d = day(S.past);
+    return `<div class="C ${S.past ? 'ro' : ''}">
+      <div class="divider">${tabs()}</div>
+      <div class="holes"></div>
+      <div class="paper">
+        <div class="head"><span class="nb">${esc(S.nb)}</span><span class="stamp">${d.short}<small>${d.dow.toUpperCase()}</small></span></div>
+        ${S.past ? '<div class="filed">FILED</div>' : ''}
+        ${ed(S.past ? 'past' : 'today', !S.past)}
+      </div></div>`;
+  },
+};
+
+function render() {
+  document.getElementById('app').innerHTML = R[S.variant]();
+  document.getElementById('lbl').textContent = `${S.variant} (${VARIANTS[S.variant]})`;
+  document.getElementById('day').textContent = S.past ? 'Viewing: past Day' : 'Viewing: today';
+  document.getElementById('nbs').textContent = `${nbs().length} Notebooks`;
+  document.getElementById('state').textContent = `nb=${S.nb} · ${S.past ? 'read-only' : 'editable'}`;
+  const p = new URLSearchParams({ variant: S.variant, day: S.past ? 'past' : 'today', nbs: S.five ? '5' : '2' });
+  history.replaceState(null, '', '?' + p);
+  document.querySelectorAll('.tab[data-nb]').forEach(t => t.onclick = () => { S.nb = t.dataset.nb; render(); });
+  document.querySelectorAll('.ed[contenteditable]').forEach(e => e.oninput = () => { if (!e.firstElementChild) e.innerHTML = '<div><br></div>'; });
+}
+const cycle = n => { S.variant = KEYS[(KEYS.indexOf(S.variant) + n + KEYS.length) % KEYS.length]; render(); };
+document.getElementById('prev').onclick = () => cycle(-1);
+document.getElementById('next').onclick = () => cycle(1);
+document.getElementById('day').onclick = () => { S.past = !S.past; render(); };
+document.getElementById('nbs').onclick = () => { S.five = !S.five; if (!nbs().includes(S.nb)) S.nb = 'My Journal'; render(); };
+addEventListener('keydown', e => {
+  if (e.target.closest('input, textarea, [contenteditable]')) return;
+  if (e.key === 'ArrowLeft') cycle(-1);
+  if (e.key === 'ArrowRight') cycle(1);
+});
+render();
+</script>
+</body>
+</html>

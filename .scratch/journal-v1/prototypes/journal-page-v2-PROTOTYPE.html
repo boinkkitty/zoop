@@ -1,0 +1,181 @@
+<!doctype html>
+<!--
+  PROTOTYPE (round 2), throwaway. Ticket: "Journal page look and feel" (.scratch/journal-v1/issues/05-journal-page-prototype.md)
+  Round 1 verdict: variant A (single sheet), but no ruled lines; minimal, modern, Apple-style; Island rail on the left.
+  The rail here is a first sketch: its detailed behaviour belongs to the "Island rail and hover expansion" ticket.
+  Bottom bar = prototype controls only: rail order, Grace Window on/off, 2 vs 5 Notebooks.
+  No persistence; edits live in memory until reload.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Zoop: journal page v2 PROTOTYPE</title>
+<style>
+  :root {
+    --bg: #f5f5f7; --sheet: #ffffff; --ink: #1d1d1f; --ink2: #6e6e73; --ink3: #a1a1a6;
+    --tab: #e8e8ed; --island: #0b0b0c; --spring: cubic-bezier(.32,1.25,.5,1);
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink); overflow: hidden; }
+  .app { display: flex; height: 100vh; }
+
+  /* ---------- Island rail ---------- */
+  .rail { width: 268px; flex: none; height: 100%; overflow-y: auto; overflow-x: visible; padding: 28px 14px 110px 20px;
+    scrollbar-width: none; -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 28px, #000 calc(100% - 60px), transparent 100%);
+    mask-image: linear-gradient(to bottom, transparent 0, #000 28px, #000 calc(100% - 60px), transparent 100%); }
+  .rail::-webkit-scrollbar { display: none; }
+  .month { font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--ink3); margin: 18px 0 8px 12px; }
+  .slot { position: relative; height: 32px; margin-bottom: 7px; }
+  .isl { position: absolute; left: 0; top: 0; width: 100%; min-height: 32px; border-radius: 16px; background: var(--island); color: #f5f5f7;
+    cursor: pointer; overflow: hidden; z-index: 1;
+    transition: width .45s var(--spring), border-radius .45s var(--spring), box-shadow .3s ease, transform .45s var(--spring); }
+  .isl .row0 { display: flex; align-items: center; gap: 8px; height: 32px; padding: 0 14px; font-size: 12.5px; white-space: nowrap; }
+  .isl .d { font-weight: 600; font-variant-numeric: tabular-nums; min-width: 44px; }
+  .isl .t { color: #d2d2d7; overflow: hidden; text-overflow: ellipsis; }
+  .isl .dot { width: 7px; height: 7px; border-radius: 50%; background: #30d158; flex: none; margin-left: auto; box-shadow: 0 0 6px #30d158; }
+  .isl .more { display: grid; grid-template-rows: 0fr; transition: grid-template-rows .45s var(--spring); }
+  .isl .more > div { overflow: hidden; }
+  .isl .nbrow { padding: 0 14px 10px; font-size: 12px; line-height: 1.4; }
+  .isl .nbrow b { display: block; font-size: 10.5px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: #8e8e93; margin-bottom: 2px; }
+  .isl .nbrow span { color: #e5e5ea; }
+  .isl .open { padding: 0 14px 10px; font-size: 11px; color: #30d158; }
+  .slot:hover .isl { width: 128%; border-radius: 22px; z-index: 5; box-shadow: 0 18px 40px rgba(0,0,0,.28); }
+  .slot:hover .isl .more { grid-template-rows: 1fr; }
+  .slot:hover .isl .t { white-space: normal; }
+  .slot.empty .isl { background: #d8d8dd; color: #6e6e73; }
+  .slot.empty .isl .t { display: none; }
+  .slot.empty:hover .isl { width: 100%; }
+  .slot.sel .isl { outline: 2px solid #0a84ff; outline-offset: 2px; }
+
+  /* ---------- Page ---------- */
+  .main { flex: 1; height: 100%; overflow-y: auto; display: flex; justify-content: center; padding: 28px 96px 120px 12px; }
+  .sheet { position: relative; width: 100%; max-width: 760px; min-height: calc(100vh - 148px); background: var(--sheet); border-radius: 22px;
+    box-shadow: 0 1px 1px rgba(0,0,0,.03), 0 8px 28px rgba(0,0,0,.06); padding: 52px 72px 80px; }
+  .head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 36px; }
+  .dow { font-size: 13px; font-weight: 600; color: var(--ink3); letter-spacing: .02em; margin-bottom: 4px; }
+  .date { font-size: 34px; font-weight: 700; letter-spacing: -.02em; }
+  .badge { font-size: 12px; font-weight: 500; color: var(--ink2); background: var(--bg); padding: 5px 11px; border-radius: 999px; }
+  .badge.live { color: #248a3d; background: #e3f6e8; }
+  .ed { outline: none; white-space: pre-wrap; word-wrap: break-word; font-size: 17px; line-height: 1.65; color: var(--ink); min-height: 60vh; caret-color: #0a84ff; }
+  .ed > div:first-child { font-size: 24px; font-weight: 650; letter-spacing: -.015em; line-height: 1.35; margin-bottom: 14px; }
+  .ed:empty::before, .ed > div:only-child:has(br:only-child)::before { content: 'Title'; color: var(--ink3); }
+  .ro .ed { color: #48484a; cursor: default; }
+  .notitle .ed > div:first-child { font-size: 17px; font-weight: 400; letter-spacing: 0; line-height: 1.65; margin: 0; }
+
+  /* Notebook tabs: one colour, on the sheet's right edge */
+  .tabs { position: absolute; top: 64px; right: -46px; display: flex; flex-direction: column; gap: 6px; }
+  .tab { width: 46px; padding: 16px 0; background: var(--tab); border-radius: 0 14px 14px 0; writing-mode: vertical-rl; text-align: center;
+    font-size: 12.5px; font-weight: 500; color: var(--ink2); cursor: pointer; transition: width .3s var(--spring), color .2s; }
+  .tab:hover { color: var(--ink); }
+  .tab.on { width: 52px; color: var(--ink); font-weight: 650; }
+  .tab.add { padding: 8px 0; opacity: .5; font-weight: 400; }
+
+  /* prototype controls (not part of the design) */
+  #bar { position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%); background: rgba(30,30,32,.92); color: #fff; border-radius: 999px;
+    display: flex; align-items: center; gap: 4px; padding: 6px; font: 500 12.5px system-ui, sans-serif; box-shadow: 0 6px 24px rgba(0,0,0,.3); z-index: 99; }
+  #bar span { padding: 0 10px; color: #8e8e93; }
+  #bar button { background: #3a3a3c; color: #fff; border: 0; border-radius: 999px; padding: 7px 12px; cursor: pointer; font: inherit; }
+</style>
+</head>
+<body>
+<div class="app"><nav class="rail" id="rail"></nav><main class="main" id="main"></main></div>
+<div id="bar"><span>PROTOTYPE</span><button id="order"></button><button id="grace"></button><button id="nbs"></button></div>
+<script>
+// ----- fake data: signup 1 Sep 2026 → today 25 Nov 2026 -----
+const TODAY = new Date(2026, 10, 25), SIGNUP = new Date(2026, 8, 1);
+const ALL_NBS = ['My Journal', 'I Learned', 'Dreams', 'Gratitude', 'Reading'];
+const J = [
+  ['Finally fixed the bike chain', 'Spent most of the morning with grease up to my elbows. It turned out the derailleur was bent, not the chain. Walked to the market after and bought too many clementines.'],
+  ['Rain all day', 'Stayed in and read. Made soup from whatever was left in the fridge, which was mostly leeks.'],
+  ['Long call with Mum', 'She is thinking about selling the house. I said nothing useful but listened, which seemed to be the point.'],
+  ['First frost', 'The car windscreen was white at seven. Scraped it with a library card.'],
+  ['Shipped the thing', 'Three weeks of work went out at 4pm and nobody noticed, which is the best possible outcome.'],
+  ['Couldn\'t sleep', 'Up at 3 making a list of everything I have been putting off. The list was shorter than I feared.'],
+  ['Swim', 'Forty lengths. The lane next to me had a man doing butterfly very slowly, like a sad dolphin.'],
+];
+const L = [
+  'to_tsquery with :* matches prefixes, so "jour:*" finds journal and journey.',
+  'Leeks need washing twice: grit hides between the layers near the root.',
+  'Octopuses taste with their arms.',
+  'chi middleware is just func(http.Handler) http.Handler.',
+  'The Dynamic Island animates with a spring, not an ease curve.',
+];
+const days = [];
+for (let d = new Date(TODAY), i = 0; d >= SIGNUP; d.setDate(d.getDate() - 1), i++) {
+  const r = (i * 7919) % 13, has = i < 2 || r > 3, hasL = has && r % 3 !== 0;
+  days.push({ date: new Date(d), i, pages: {
+    'My Journal': has ? J[i % J.length].join('\n') : '',
+    'I Learned': hasL ? 'Today I learned\n' + L[i % L.length] : '',
+    'Dreams': has && r === 12 ? 'Flying over a car park\nIt was very ordinary up there.' : '',
+  }});
+}
+const S = { sel: 0, nb: 'My Journal', newestFirst: true, grace: false, five: false };
+const fmt = (d, o) => d.toLocaleDateString('en-GB', o);
+const esc = s => s.replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]);
+const title = day => day.pages['My Journal'].split('\n')[0];
+const nbs = () => S.five ? ALL_NBS : ALL_NBS.slice(0, 2);
+const writable = day => day.i === 0 || (day.i === 1 && S.grace);
+const glimpse = t => { const s = t.replace(/\n/g, ' · '); return s.length > 80 ? s.slice(0, 80).trimEnd() + '…' : s; };
+
+function renderRail() {
+  const list = S.newestFirst ? days : [...days].reverse();
+  let html = '', month = '';
+  for (const day of list) {
+    const m = fmt(day.date, { month: 'long', year: 'numeric' });
+    if (m !== month) { html += `<div class="month">${m}</div>`; month = m; }
+    const filled = nbs().filter(n => day.pages[n]);
+    const label = day.i === 0 ? 'Today' : fmt(day.date, { day: 'numeric', month: 'short' });
+    html += `<div class="slot ${filled.length ? '' : 'empty'} ${day.i === S.sel ? 'sel' : ''}" data-i="${day.i}">
+      <div class="isl">
+        <div class="row0"><span class="d">${label}</span><span class="t">${esc(title(day))}</span>${day.i === 1 && S.grace ? '<span class="dot"></span>' : ''}</div>
+        <div class="more"><div>
+          ${day.i === 1 && S.grace ? '<div class="open">Still open until 02:00</div>' : ''}
+          ${filled.map(n => `<div class="nbrow"><b>${n}</b><span>${esc(glimpse(day.pages[n]))}</span></div>`).join('')}
+        </div></div>
+      </div></div>`;
+  }
+  const rail = document.getElementById('rail');
+  rail.innerHTML = html;
+  rail.querySelectorAll('.slot').forEach(s => s.onclick = () => { S.sel = +s.dataset.i; render(); });
+}
+
+function renderPage() {
+  const day = days[S.sel], w = writable(day), text = day.pages[S.nb] || '';
+  const lines = (text ? text.split('\n') : ['']).map(l => `<div>${l ? esc(l) : '<br>'}</div>`).join('');
+  const badge = w ? (day.i === 1 ? '<span class="badge live">Still open until 02:00</span>' : '') : '<span class="badge">Read only</span>';
+  document.getElementById('main').innerHTML = `
+    <div class="sheet ${w ? '' : 'ro'} ${S.nb === 'My Journal' ? '' : 'notitle'}">
+      <div class="head"><div><div class="dow">${fmt(day.date, { weekday: 'long' })}${day.i === 0 ? ' · Today' : ''}</div>
+        <div class="date">${fmt(day.date, { day: 'numeric', month: 'long', year: 'numeric' })}</div></div>${badge}</div>
+      <div class="ed" ${w ? 'contenteditable="true" spellcheck="false"' : ''}>${lines}</div>
+      <div class="tabs">${nbs().map(n => `<div class="tab ${n === S.nb ? 'on' : ''}" data-nb="${n}">${n}</div>`).join('')}<div class="tab add" title="more Notebooks later">+</div></div>
+    </div>`;
+  document.querySelectorAll('.tab[data-nb]').forEach(t => t.onclick = () => { S.nb = t.dataset.nb; render(); });
+  const ed = document.querySelector('.ed[contenteditable]');
+  if (ed) ed.oninput = () => {
+    if (!ed.firstElementChild) ed.innerHTML = '<div><br></div>';
+    day.pages[S.nb] = ed.innerText.replace(/\n$/, '');
+    renderRail();
+  };
+}
+
+function render() {
+  if (!nbs().includes(S.nb)) S.nb = 'My Journal';
+  renderRail(); renderPage();
+  document.getElementById('order').textContent = S.newestFirst ? 'Rail: newest first' : 'Rail: oldest first';
+  document.getElementById('grace').textContent = S.grace ? 'Grace Window: on (00:00–02:00)' : 'Grace Window: off';
+  document.getElementById('nbs').textContent = `${nbs().length} Notebooks`;
+}
+document.getElementById('order').onclick = () => {
+  S.newestFirst = !S.newestFirst; render();
+  const r = document.getElementById('rail'); r.scrollTop = S.newestFirst ? 0 : r.scrollHeight;
+};
+document.getElementById('grace').onclick = () => { S.grace = !S.grace; render(); };
+document.getElementById('nbs').onclick = () => { S.five = !S.five; render(); };
+render();
+</script>
+</body>
+</html>
