@@ -34,6 +34,10 @@ _Avoid_: Heading, subject
 The thin pill for one Day in the side date rail, showing that Day's date and title.
 _Avoid_: Date chip, bar
 
+**Notice**:
+A short message about the app, the account or the open Page (for example "Not saved, retrying"), shown in the notice pill at the top of the sheet. Notices stack most urgent first.
+_Avoid_: Banner, toast, alert, Island (an Island is always a Day in the rail)
+
 ### Access
 
 **Free User / Premium User**:

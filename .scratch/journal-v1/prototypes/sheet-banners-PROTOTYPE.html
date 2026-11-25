@@ -1,0 +1,422 @@
+<!doctype html>
+<!--
+  PROTOTYPE, throwaway. VERDICT (2026-11-25): B (Island) for Notices + F3 coach marks for Day 1, stack order and dismiss rules as below; see the ticket's Answer.
+  Ticket: "Sheet banners and first run" (.scratch/journal-v1/issues/15-sheet-banners-and-first-run.md)
+  Built on the T4 sheet (journal-page-v3), the R4 rail (island-rail) and search A (search-results). Search and the scrubber are drawn, not wired.
+  Question: how do the quiet notices on the sheet look and stack, which can be dismissed, and what does a brand-new user see on Day 1?
+  Plan: four structurally different placements for notices, switchable via ?variant=A|B|C|D, the ← / → keys (outside the editor) or the bottom bar.
+    A  Strip on the sheet: tinted rows at the top of the sheet, stacked, sticky while you scroll.
+    B  Island: one black pill hanging at the top of the sheet area, like the Dynamic Island. It shows the most urgent notice and "+N";
+       hover expands it into the whole stack (Spring motion, like the rail).
+    C  Header line: each notice is a small pill on the weekday line, next to "Today". The most urgent one spells itself out
+       in one grey line under the date; click another pill to read it instead. The quietest.
+    D  Split by scope: notices about this Page (changed elsewhere, not saved, closed at 02:00) sit on the sheet like A;
+       notices about the account or app (verify email, timezone, update) sit in a card at the bottom of the sidebar.
+  Second axis, first run (bar button "Day 1 hints"): F1 placeholders only + a faint ⌘/ hint, F2 a grey welcome note written on
+  the sheet that vanishes on the first keystroke, F3 three coach marks shown once.
+  Bar: scenario (Day 1 / usual day, at 00:40 so yesterday is in its Grace Window), toggles for each notice, window width, reset.
+  Stack order (most urgent first): update → changed elsewhere → not saved → closed at 02:00 → timezone → verify email.
+  No persistence. ⌘/ opens the shortcut sheet.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Zoop: Sheet banners and first run PROTOTYPE</title>
+<style>
+  :root {
+    --bg: #f5f5f7; --sheet: #ffffff; --ink: #1d1d1f; --ink2: #6e6e73; --ink3: #a1a1a6; --island: #0b0b0c; --blue: #0a84ff;
+    --green: #30d158; --amber: #ff9f0a; --ease: cubic-bezier(.32,1.25,.5,1); --dur: .45s;
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: #dcdce0; color: var(--ink); overflow: hidden; }
+  #frame { position: relative; height: 100vh; margin: 0 auto; width: 100%; background: var(--bg); overflow: hidden; }
+  #frame.narrow { width: 760px; box-shadow: 0 0 0 1px #c7c7cc, 0 10px 40px rgba(0,0,0,.12); }
+  .app { display: flex; height: 100%; }
+  kbd { font: 500 10.5px system-ui; color: var(--ink3); border: 1px solid #d1d1d6; border-bottom-width: 1.5px; border-radius: 5px; padding: 0 4px; line-height: 15px; background: transparent; }
+
+  /* ---------- sidebar ---------- */
+  .left { width: 300px; flex: none; height: 100%; display: flex; flex-direction: column; background: var(--bg); }
+  #navtop { padding: 22px 12px 6px 18px; }
+  .nav { display: flex; flex-direction: column; gap: 1px; }
+  .nav a { display: flex; align-items: center; gap: 10px; padding: 7px 10px; border-radius: 8px; font-size: 13.5px; cursor: pointer; }
+  .nav a:hover { background: rgba(0,0,0,.05); } .nav a.on { background: rgba(0,0,0,.07); font-weight: 600; }
+  .nav svg { color: var(--ink2); }
+  .search { margin-top: 8px; display: flex; align-items: center; gap: 6px; background: #e8e8ed; border-radius: 9px; padding: 0 8px 0 10px; height: 30px; color: var(--ink3); font-size: 12.5px; }
+  .search span { flex: 1; }
+  .navdiv { height: 1px; background: #e2e2e7; margin: 12px 4px 0; }
+  #railwrap { position: relative; flex: 1; min-height: 0; }
+  .rail { height: 100%; overflow-y: auto; padding: 4px 30px 40px 18px; scrollbar-width: none; }
+  .rail::-webkit-scrollbar { display: none; }
+  .slot { margin-bottom: 6px; }
+  .isl { position: relative; width: 100%; min-height: 28px; border-radius: 14px; background: var(--island); color: #f5f5f7; cursor: pointer; overflow: hidden; transition: border-radius var(--dur) var(--ease), background .4s; }
+  .row0 { display: flex; align-items: center; gap: 10px; height: 28px; padding: 0 12px; font-size: 12px; white-space: nowrap; }
+  .d { font-weight: 600; font-variant-numeric: tabular-nums; min-width: 46px; }
+  .sep { width: 1px; height: 12px; background: rgba(255,255,255,.22); flex: none; }
+  .t { color: #d2d2d7; overflow: hidden; text-overflow: ellipsis; min-width: 0; flex: 1; }
+  .gdot { width: 6px; height: 6px; border-radius: 50%; background: var(--green); flex: none; animation: pulse 1.8s ease-in-out infinite; }
+  @keyframes pulse { 50% { opacity: .35; } }
+  .slot.empty .isl { background: #d8d8dd; color: #6e6e73; }
+  .slot.empty .t, .slot.empty .sep { display: none; }
+  .slot.sel .isl { outline: 2px solid var(--blue); outline-offset: 2px; }
+  .month { font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--ink3); padding: 14px 0 8px 12px; position: sticky; top: -4px; z-index: 2; background: var(--bg); }
+  .railend { text-align: center; font-size: 11px; color: var(--ink3); padding: 12px 0; line-height: 1.5; }
+  .railhint { font-size: 11.5px; color: var(--ink3); padding: 6px 12px; line-height: 1.45; }
+
+  /* ---------- Page (T4) ---------- */
+  .main { position: relative; flex: 1; height: 100%; overflow-y: auto; display: flex; justify-content: center; padding: 24px 56px 120px 8px; }
+  .sheet { position: relative; width: 100%; max-width: 860px; min-height: calc(100vh - 48px); height: max-content; background: var(--sheet); border-radius: 18px;
+    box-shadow: 0 1px 1px rgba(0,0,0,.03), 0 8px 28px rgba(0,0,0,.05); padding: 64px 140px 80px 96px; }
+  .narrow .sheet { padding: 56px 100px 80px 48px; }
+  .head { margin-bottom: 32px; }
+  .dow { font-size: 12px; font-weight: 500; color: var(--ink3); margin-bottom: 3px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .date { font-size: 19px; font-weight: 600; letter-spacing: -.01em; }
+  .badge { font-size: 11px; font-weight: 500; color: var(--ink2); background: var(--bg); padding: 3px 9px; border-radius: 999px; display: inline-flex; align-items: center; gap: 5px; }
+  .badge.open { color: #248a3d; background: #eaf8ee; }
+  .edwrap { position: relative; }
+  .ed { outline: none; white-space: pre-wrap; word-wrap: break-word; font-size: 17px; line-height: 1.65; min-height: 60vh; caret-color: var(--blue); }
+  .ed > div { margin-bottom: .55em; }
+  .ed > div:first-child { font-size: 21px; font-weight: 650; letter-spacing: -.015em; line-height: 1.35; margin-bottom: 14px; }
+  .notitle .ed > div:first-child { font-size: 17px; font-weight: 400; letter-spacing: 0; line-height: 1.65; margin: 0 0 .55em; }
+  .ro .ed { color: #48484a; cursor: default; }
+  .phl { position: absolute; inset: 0 0 auto 0; pointer-events: none; color: #c7c7cc; font-size: 17px; line-height: 1.65; }
+  .phl .pt { font-size: 21px; font-weight: 650; letter-spacing: -.015em; line-height: 1.35; margin-bottom: 14px; }
+  .notitle .phl .pt { font-size: 17px; font-weight: 400; letter-spacing: 0; line-height: 1.65; margin-bottom: .55em; }
+  .phl p { margin: 0 0 .55em; max-width: 520px; }
+  .phl .ww { color: #b9b9be; font-size: 15px; line-height: 1.6; }
+  .phl .ww b { color: #a1a1a6; font-weight: 600; }
+  .slashhint { position: absolute; right: 70px; bottom: 26px; font-size: 11.5px; color: var(--ink3); display: flex; align-items: center; gap: 6px; }
+  .tabs { position: absolute; top: 0; bottom: 0; right: 0; width: 52px; border-left: 1px solid #efeff2; display: flex; flex-direction: column; padding-top: 64px; }
+  .tab { writing-mode: vertical-rl; padding: 16px 0; text-align: center; font-size: 11px; font-weight: 500; letter-spacing: .08em; text-transform: uppercase; color: var(--ink3); cursor: pointer; }
+  .tab.on { color: var(--ink); font-weight: 650; box-shadow: inset 2px 0 0 var(--ink); }
+  .tab.plus { writing-mode: horizontal-tb; color: #d1d1d6; }
+
+  /* ---------- notices: shared ---------- */
+  .ndot { width: 7px; height: 7px; border-radius: 50%; flex: none; background: var(--ink3); }
+  .tone-warn .ndot { background: var(--amber); } .tone-act .ndot { background: var(--blue); } .tone-info .ndot { background: #aeaeb2; }
+  .nbtn { border: 0; border-radius: 999px; padding: 4px 11px; font: 500 12px system-ui; cursor: pointer; background: transparent; color: var(--ink); white-space: nowrap; }
+  .nbtn.pri { background: var(--ink); color: #fff; }
+  .nbtn:not(.pri):hover { background: rgba(0,0,0,.06); }
+  .nx { border: 0; background: none; color: var(--ink3); font-size: 15px; cursor: pointer; padding: 0 2px; line-height: 1; }
+  .nx:hover { color: var(--ink); }
+  .ntx { flex: 1; min-width: 0; font-size: 13px; line-height: 1.4; }
+  .ntx em { font-style: normal; color: var(--ink2); }
+  @keyframes nin { from { opacity: 0; transform: translateY(-6px); } }
+
+  /* A (and D's Page half): strip on the sheet */
+  .nA { position: sticky; top: 12px; z-index: 4; margin: -40px -56px 22px -48px; display: flex; flex-direction: column; gap: 6px; }
+  .narrow .nA { margin: -36px -40px 20px -24px; }
+  .nrow { display: flex; align-items: center; gap: 10px; padding: 8px 10px 8px 14px; border-radius: 12px; background: rgba(245,245,247,.92); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); animation: nin .25s ease; }
+  .nrow.tone-warn { background: rgba(255,244,229,.94); }
+  .nact { display: flex; gap: 4px; align-items: center; }
+
+  /* B: Island */
+  #layerB { position: absolute; top: 10px; left: 300px; right: 0; display: flex; justify-content: center; pointer-events: none; z-index: 12; }
+  .narrow #layerB { left: 0; }
+  .bI { pointer-events: auto; background: var(--island); color: #f5f5f7; border-radius: 20px; min-width: 260px; max-width: 560px; overflow: hidden; box-shadow: 0 8px 26px rgba(0,0,0,.18);
+    transition: border-radius var(--dur) var(--ease), box-shadow .3s; animation: drop .45s var(--ease); }
+  @keyframes drop { from { transform: translateY(-30px) scale(.9); opacity: 0; } }
+  .bI .brow { display: flex; align-items: center; gap: 10px; padding: 7px 8px 7px 14px; min-height: 40px; }
+  .bI .ntx { color: #f5f5f7; font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .bI .ntx em { color: #a1a1a6; }
+  .bI .nbtn { color: #f5f5f7; } .bI .nbtn.pri { background: #f5f5f7; color: #000; } .bI .nbtn:not(.pri):hover { background: rgba(255,255,255,.12); }
+  .bI .nx { color: #8e8e93; } .bI .nx:hover { color: #fff; }
+  .bI .cnt { font-size: 11px; font-weight: 600; color: #8e8e93; background: rgba(255,255,255,.1); border-radius: 999px; padding: 2px 7px; }
+  .bI .rest { display: grid; grid-template-rows: 0fr; opacity: 0; transition: grid-template-rows var(--dur) var(--ease), opacity .25s; }
+  .bI .rest > div { overflow: hidden; }
+  .bI .rest .brow { border-top: 1px solid rgba(255,255,255,.08); }
+  .bI .rest .ntx { white-space: normal; }
+  .bI:hover { border-radius: 22px; } .bI:hover .rest { grid-template-rows: 1fr; opacity: 1; transition-delay: .15s; } .bI:hover .cnt { display: none; }
+  .bI:hover > .brow .ntx { white-space: normal; }
+
+  /* C: header line */
+  .cp { font-size: 11px; font-weight: 500; color: var(--ink2); background: var(--bg); padding: 3px 9px 3px 7px; border-radius: 999px; display: inline-flex; align-items: center; gap: 5px; cursor: pointer; border: 0; font-family: inherit; }
+  .cp .ndot { width: 6px; height: 6px; }
+  .cp.on { background: #e8e8ed; color: var(--ink); }
+  .cline { margin-top: 8px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 12.5px; color: var(--ink2); animation: nin .2s ease; }
+  .cline .ntx { flex: 0 1 auto; font-size: 12.5px; color: var(--ink2); }
+  .cline .nbtn { padding: 2px 9px; font-size: 11.5px; } .cline .nbtn.pri { background: #e8e8ed; color: var(--ink); }
+
+  /* D: sidebar card for account / app notices */
+  #nD { margin: 0 12px 96px 18px; /* 96px clears the prototype bar */ display: flex; flex-direction: column; gap: 8px; }
+  .dcard { background: #fff; border-radius: 12px; padding: 11px 12px 10px; box-shadow: 0 1px 2px rgba(0,0,0,.05), 0 0 0 .5px rgba(0,0,0,.06); animation: nin .25s ease; }
+  .dcard .top { display: flex; gap: 8px; align-items: flex-start; }
+  .dcard .ndot { margin-top: 5px; }
+  .dcard .ntx { font-size: 12.5px; }
+  .dcard .nact { margin: 8px 0 0 13px; display: flex; gap: 4px; flex-wrap: wrap; }
+  .dcard .nbtn { padding: 3px 10px; font-size: 11.5px; }
+  .hdot { position: absolute; top: -2px; right: -2px; width: 9px; height: 9px; border-radius: 50%; background: var(--blue); border: 2px solid var(--bg); }
+
+  /* F3 coach marks */
+  .coach { position: absolute; z-index: 30; width: 250px; background: var(--island); color: #f5f5f7; border-radius: 14px; padding: 12px 14px 10px; font-size: 12.5px; line-height: 1.45; box-shadow: 0 12px 34px rgba(0,0,0,.25); animation: nin .25s ease; }
+  .coach b { display: block; font-size: 13px; margin-bottom: 3px; }
+  .coach .cf { display: flex; align-items: center; justify-content: space-between; margin-top: 9px; font-size: 11px; color: #8e8e93; }
+  .coach .cf button { border: 0; border-radius: 999px; background: #f5f5f7; color: #000; font: 600 11.5px system-ui; padding: 4px 11px; cursor: pointer; }
+  .coach .cf .sk { background: none; color: #8e8e93; font-weight: 500; }
+  .coach::before { content: ''; position: absolute; width: 12px; height: 12px; background: var(--island); transform: rotate(45deg); border-radius: 2px; }
+  .coach.pl::before { left: -5px; top: 18px; } .coach.pr::before { right: -5px; top: 18px; } .coach.pt::before { left: 26px; top: -5px; }
+  .coach kbd { color: #d2d2d7; border-color: #48484a; }
+
+  /* shortcut sheet */
+  #ks { display: none; position: absolute; inset: 0; z-index: 40; background: rgba(245,245,247,.5); -webkit-backdrop-filter: blur(5px); backdrop-filter: blur(5px); }
+  #ks.on { display: block; }
+  #ks .box { width: 380px; margin: 14vh auto 0; background: #fff; border-radius: 16px; padding: 18px 20px; box-shadow: 0 24px 70px rgba(0,0,0,.2); font-size: 13px; }
+  #ks h3 { margin: 0 0 10px; font-size: 14px; }
+  #ks .k { display: flex; justify-content: space-between; padding: 5px 0; border-top: 1px solid #f2f2f4; }
+
+  /* narrow window: drawer */
+  #hamb, #scrim { display: none; }
+  .narrow .main { padding-left: 64px; }
+  .narrow .left { position: absolute; left: 0; top: 0; bottom: 0; z-index: 20; transform: translateX(-100%); transition: transform .35s cubic-bezier(.25,.8,.25,1); box-shadow: 0 0 40px rgba(0,0,0,.18); }
+  .narrow.dopen .left { transform: none; }
+  .narrow #hamb { display: flex; position: absolute; left: 14px; top: 22px; z-index: 5; width: 34px; height: 34px; border-radius: 10px; border: 0; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.12); align-items: center; justify-content: center; cursor: pointer; }
+  .narrow.dopen #scrim { display: block; position: absolute; inset: 0; z-index: 15; background: rgba(0,0,0,.12); }
+
+  /* prototype controls (not part of the design) */
+  #bar { position: fixed; bottom: 14px; left: 50%; transform: translateX(-50%); background: rgba(30,30,32,.94); color: #fff; border-radius: 20px; flex-wrap: wrap; justify-content: center; max-width: 96vw; width: max-content;
+    display: flex; align-items: center; gap: 4px; padding: 6px; font: 500 12px system-ui, sans-serif; box-shadow: 0 6px 24px rgba(0,0,0,.3); z-index: 99; }
+  #bar span { padding: 0 6px; color: #8e8e93; }
+  #bar button { background: #3a3a3c; color: #fff; border: 0; border-radius: 999px; padding: 6px 10px; cursor: pointer; font: inherit; }
+  #bar #vn { background: #fff; color: #000; font-weight: 650; }
+  #bar button.off { background: transparent; color: #8e8e93; box-shadow: inset 0 0 0 1px #48484a; }
+  #bar .brk { flex-basis: 100%; height: 0; padding: 0; }
+</style>
+</head>
+<body>
+<div id="frame"><div class="app" id="app">
+  <aside class="left"><div id="navtop"></div><div id="railwrap"><nav class="rail" id="rail"></nav></div><div id="nD"></div></aside>
+  <main class="main" id="main"></main>
+  <div id="scrim"></div>
+  <div id="layerB"></div>
+  <div id="coach"></div>
+  <div id="ks"><div class="box"><h3>Keyboard shortcuts</h3>
+    <div class="k"><span><b>Bold</b></span><kbd>⌘B</kbd></div><div class="k"><span><i>Italic</i></span><kbd>⌘I</kbd></div><div class="k"><span><u>Underline</u></span><kbd>⌘U</kbd></div>
+    <div class="k"><span>Highlight</span><kbd>⌘⇧H</kbd></div><div class="k"><span>Bullet list</span><kbd>⌘⇧8</kbd></div><div class="k"><span>Numbered list</span><kbd>⌘⇧7</kbd></div>
+    <div class="k"><span>Checklist</span><kbd>⌘⇧9</kbd></div><div class="k"><span>Quote</span><kbd>⌘⇧B</kbd></div><div class="k"><span>Search</span><kbd>⌘K</kbd></div>
+    <div class="k"><span>This sheet</span><kbd>⌘/</kbd></div></div></div>
+</div></div>
+<div id="bar"><span>PROTOTYPE</span><button id="prev">←</button><button id="vn"></button><button id="next">→</button>
+  <button id="scen"></button><button id="fr"></button><button id="narrow"></button><button id="reset">Reset</button>
+  <i class="brk"></i><span>Notices</span><span id="tg"></span><span id="order"></span></div>
+<script>
+// ----- fake clock: 00:40 on Wed 25 Nov 2026, so yesterday is in its Grace Window -----
+const TODAY = new Date(2026, 10, 25), NBS = ['My Journal', 'I Learned'];
+const fmt = (d, o) => d.toLocaleDateString('en-GB', o);
+const esc = s => s.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+const TITLES = ['Rain all day', 'Long call with Mum', 'First frost', 'Shipped the thing', 'Swim', 'Sunday market', 'Soup weather', 'Back on the bike', 'Quiet one', 'Fog on the river'];
+const SENT = ['Stayed in and read most of the afternoon.', 'Made soup from whatever was left in the fridge, which was mostly leeks.', 'Mum is thinking about selling the house.',
+  'The car windscreen was white at seven.', 'Forty lengths at the pool, slower than last week.', 'Walked to the market and bought too many clementines.', 'The fog sat on the river until noon.'];
+function usualDays() { // signup 14 Sep 2026
+  const out = [];
+  for (let d = new Date(TODAY), i = 0; d >= new Date(2026, 8, 14); d.setDate(d.getDate() - 1), i++) {
+    const has = i === 1 || (i > 1 && (i * 7) % 5 !== 0);
+    const jt = i === 0 ? '' : has ? TITLES[i % TITLES.length] + '\n' + [SENT[i % 7], SENT[(i + 3) % 7]].join(' ') : '';
+    out.push({ date: new Date(d), i, pages: { 'My Journal': jt, 'I Learned': has && i % 2 ? 'Today I learned\nOctopuses taste with their arms.' : '' } });
+  }
+  return out;
+}
+const firstDays = () => [{ date: new Date(TODAY), i: 0, pages: { 'My Journal': '', 'I Learned': '' } }];
+
+// ----- notices -----
+const ORDER = ['update', 'conflict', 'unsaved', 'locked', 'tz', 'verify'];
+const NOTE = {
+  update:   { scope: 'app',  tone: 'warn', short: 'Update ready', label: 'Zoop was updated',
+              text: () => 'Zoop was updated. <em>Reload to keep saving. What you wrote is kept on this device.</em>', acts: [['Reload', 1, 'clear']], x: false },
+  conflict: { scope: 'page', tone: 'act', short: 'Changed elsewhere', label: 'Changed on another device',
+              text: () => 'This Page changed on another device.', acts: [['Keep this version', 1, 'clear'], ['Use the other', 0, 'other']], x: false },
+  unsaved:  { scope: 'page', tone: 'warn', short: 'Not saved', label: 'Not saved',
+              text: () => `Not saved, retrying in ${S.retry}s. <em>Your words are kept on this device.</em>`, acts: [['Try now', 0, 'clear']], x: false },
+  locked:   { scope: 'page', tone: 'info', short: 'Closed at 02:00', label: 'Day closed',
+              text: () => 'Yesterday closed at 02:00. <em>Everything you wrote is saved.</em>', acts: [['Go to today', 1, 'today']], x: true },
+  tz:       { scope: 'app',  tone: 'act', short: 'Tokyo time?', label: 'Timezone',
+              text: () => 'Looks like you’re on Tokyo time. <em>Start your Days on Tokyo time from tomorrow?</em>', acts: [['Switch', 1, 'clear'], ['Keep London', 0, 'clear']], x: false },
+  verify:   { scope: 'app',  tone: 'info', short: 'Verify email', label: 'Verify email',
+              text: () => 'Check your inbox to verify <b>you@example.com</b>.', acts: [['Resend', 0, 'resent']], x: true },
+};
+const V = { A: 'Strip on the sheet', B: 'Island', C: 'Header line', D: 'Split by scope' }, VK = Object.keys(V);
+const FR = { F1: 'placeholders + ⌘/ hint', F2: 'welcome note on the sheet', F3: 'coach marks' };
+const qv = new URLSearchParams(location.search).get('variant');
+const S = { v: VK.includes(qv) ? qv : 'A', scen: 'first', fr: 'F1', narrow: false, dopen: false, sel: 0, nb: 'My Journal', on: {}, cPick: null, coach: 0, retry: 4, resent: false, days: [] };
+function setScen(sc) {
+  S.scen = sc; S.days = sc === 'first' ? firstDays() : usualDays(); S.sel = 0; S.nb = 'My Journal'; S.coach = 0; S.cPick = null; S.resent = false;
+  S.on = sc === 'first' ? { verify: true } : { tz: true, unsaved: true, conflict: true };
+}
+const day = () => S.days[S.sel];
+const editable = () => day().i === 0 || (day().i === 1 && !S.on.locked);
+function visible() {
+  return ORDER.filter(id => S.on[id] && !(id === 'locked' && day().i !== 1));
+}
+function act(id, what) {
+  if (what === 'resent') { S.resent = true; NOTE.verify.text = () => 'Sent again. <em>Check your inbox for <b>you@example.com</b>.</em>'; render(); return; }
+  if (what === 'other') day().pages[S.nb] = (day().pages[S.nb] || 'From the other device') + '\nA line typed on the laptop.';
+  if (what === 'today') { S.sel = 0; }
+  S.on[id] = false; render();
+}
+const btns = (id, cls = '') => NOTE[id].acts.map(([l, p, w]) => `<button class="nbtn ${p ? 'pri' : ''} ${cls}" data-n="${id}" data-w="${w}">${l}</button>`).join('')
+  + (NOTE[id].x ? `<button class="nx" data-n="${id}" data-w="dismiss" title="Dismiss">×</button>` : '');
+
+function stripHTML(ids) { // A, and D's Page half
+  if (!ids.length) return '';
+  return `<div class="nA">${ids.map(id => `<div class="nrow tone-${NOTE[id].tone}"><i class="ndot"></i><div class="ntx">${NOTE[id].text()}</div><div class="nact">${btns(id)}</div></div>`).join('')}</div>`;
+}
+function islandHTML(ids) { // B
+  if (!ids.length) return '';
+  const [a, ...rest] = ids, row = id => `<div class="brow tone-${NOTE[id].tone}"><i class="ndot"></i><div class="ntx">${NOTE[id].text()}</div>${btns(id)}</div>`;
+  return `<div class="bI">${row(a).replace('</div><button', `</div>${rest.length ? `<span class="cnt">+${rest.length}</span>` : ''}<button`)}
+    ${rest.length ? `<div class="rest"><div>${rest.map(row).join('')}</div></div>` : ''}</div>`;
+}
+function headerPills(ids) { // C
+  if (!ids.length) return { pills: '', line: '' };
+  const pick = ids.includes(S.cPick) ? S.cPick : ids[0];
+  return {
+    pills: ids.map(id => `<button class="cp tone-${NOTE[id].tone} ${id === pick ? 'on' : ''}" data-pick="${id}"><i class="ndot"></i>${NOTE[id].short}</button>`).join(''),
+    line: `<div class="cline"><span class="ntx">${NOTE[pick].text()}</span>${btns(pick)}</div>`,
+  };
+}
+function sideCards(ids) { // D's app half
+  return ids.map(id => `<div class="dcard tone-${NOTE[id].tone}"><div class="top"><i class="ndot"></i><div class="ntx">${NOTE[id].text()}</div>${NOTE[id].x ? `<button class="nx" data-n="${id}" data-w="dismiss">×</button>` : ''}</div>
+    <div class="nact">${NOTE[id].acts.map(([l, p, w]) => `<button class="nbtn ${p ? 'pri' : ''}" data-n="${id}" data-w="${w}">${l}</button>`).join('')}</div></div>`).join('');
+}
+
+// ----- rail -----
+const title = d => d.pages['My Journal'].split('\n')[0];
+const written = d => NBS.some(n => d.pages[n].trim());
+const label = d => d.i === 0 ? 'Today' : d.i === 1 ? 'Yesterday' : fmt(d.date, { weekday: 'short', day: 'numeric' });
+function renderRail() {
+  let h = '', m = null;
+  for (const d of S.days) {
+    const mk = fmt(d.date, { month: 'long', year: 'numeric' }); if (mk !== m) { h += `<div class="month">${mk}</div>`; m = mk; }
+    const grace = S.scen === 'usual' && d.i === 1 && !S.on.locked;
+    h += `<div class="slot ${written(d) ? '' : 'empty'} ${d.i === S.sel ? 'sel' : ''}" data-i="${d.i}"><div class="isl"><div class="row0"><span class="d">${label(d)}</span>${grace ? '<i class="gdot"></i>' : ''}<span class="sep"></span><span class="t">${esc(title(d))}</span></div></div></div>`;
+  }
+  const first = S.days[S.days.length - 1].date;
+  h += `<div class="railend">You started here · ${S.scen === 'first' ? 'today' : fmt(first, { day: 'numeric', month: 'long', year: 'numeric' })}</div>`;
+  if (S.scen === 'first' && S.fr !== 'F1') h += `<div class="railhint">Every Day gets an Island here. Its Title is the first line you write.</div>`;
+  document.getElementById('rail').innerHTML = h;
+}
+
+// ----- page -----
+function placeholder() {
+  if (written(day()) && day().pages[S.nb].trim()) return '';
+  if (!editable()) return `<div class="phl"><p>Nothing written on this Day.</p></div>`;
+  const j = S.nb === 'My Journal';
+  if (S.scen === 'first' && S.fr === 'F2') return `<div class="phl">${j ? `<div class="pt">Title</div>
+    <div class="ww"><p>Welcome to Zoop. This is today’s Page. Write anything; it saves as you type.</p>
+    <p>The <b>first line</b> becomes the Day’s Title. It turns bold here and shows on today’s Island on the left.</p>
+    <p>On the right edge are two Notebooks: <b>My Journal</b> for your day, <b>I Learned</b> for one thing you picked up.</p>
+    <p>You can keep writing until <b>02:00</b>; after that the Day closes and a new one starts. Press <b>⌘/</b> for formatting shortcuts.</p>
+    <p>This note disappears when you start typing.</p></div>` : `<div class="ww"><p>I Learned is a second Page for every Day: one thing you found out, however small.</p></div>`}</div>`;
+  return `<div class="phl">${j ? '<div class="pt">Title</div><p>Write about your day…</p>' : '<p>What did you learn today?</p>'}</div>`;
+}
+function renderPage() {
+  const d = day(), w = editable(), text = d.pages[S.nb] || '', ids = visible();
+  const pageIds = S.v === 'D' ? ids.filter(id => NOTE[id].scope === 'page') : ids;
+  const C = S.v === 'C' ? headerPills(ids) : { pills: '', line: '' };
+  const grace = S.scen === 'usual' && d.i === 1 && w;
+  const status = d.i === 0 ? '' : grace ? '<span class="badge open"><i class="gdot"></i>Still open until 02:00</span>' : '<span class="badge">Read only</span>';
+  const lines = (text ? text.split('\n') : ['']).map(l => `<div>${l ? esc(l) : '<br>'}</div>`).join('');
+  document.getElementById('main').innerHTML = `
+    <button id="hamb" title="Days" style="position:absolute"><svg width="16" height="16" viewBox="0 0 16 16" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M2.5 4h11M2.5 8h11M2.5 12h11"/></svg>${S.v === 'D' && ids.some(id => NOTE[id].scope === 'app') ? '<i class="hdot"></i>' : ''}</button>
+    <div class="sheet ${w ? '' : 'ro'} ${S.nb === 'My Journal' ? '' : 'notitle'}">
+      ${S.v === 'A' || S.v === 'D' ? stripHTML(pageIds) : ''}
+      <div class="head"><div class="dow">${fmt(d.date, { weekday: 'long' })}${d.i === 0 ? ' · Today' : ''}${status}${C.pills}</div>
+        <div class="date">${fmt(d.date, { day: 'numeric', month: 'long', year: 'numeric' })}</div>${C.line}</div>
+      <div class="edwrap"><div class="ed" ${w ? 'contenteditable="true" spellcheck="false"' : ''}>${lines}</div>${placeholder()}</div>
+      ${S.scen === 'first' && S.fr === 'F1' ? '<div class="slashhint"><kbd>⌘/</kbd> shortcuts</div>' : ''}
+      <div class="tabs">${NBS.map(n => `<div class="tab ${n === S.nb ? 'on' : ''}" data-nb="${n}">${n}</div>`).join('')}<div class="tab plus">+</div></div>
+    </div>`;
+  document.getElementById('layerB').innerHTML = S.v === 'B' ? islandHTML(ids) : '';
+  document.getElementById('nD').innerHTML = S.v === 'D' ? sideCards(ids.filter(id => NOTE[id].scope === 'app')) : '';
+  document.getElementById('hamb').onclick = () => { S.dopen = true; shell(); };
+  document.querySelectorAll('.tab[data-nb]').forEach(t => t.onclick = () => { S.nb = t.dataset.nb; render(); });
+  const ed = document.querySelector('.ed[contenteditable]');
+  if (ed) ed.oninput = () => {
+    const was = !!d.pages[S.nb].trim(); d.pages[S.nb] = ed.innerText.replace(/\n$/, '');
+    const now = !!d.pages[S.nb].trim(); document.querySelector('.phl')?.style.setProperty('display', now ? 'none' : '');
+    if (now && S.scen === 'first' && S.fr === 'F3') { S.coach = 9; renderCoach(); }
+    if (was !== now || S.nb === 'My Journal') renderRail();
+  };
+}
+
+// ----- F3 coach marks -----
+const COACH = [
+  { tgt: '.edwrap', side: 'pl', b: 'Today’s Page', t: 'Just start writing. It saves as you type. The first line becomes the Day’s Title and turns bold.' },
+  { tgt: '.tabs', side: 'pr', b: 'Two Notebooks', t: '<b style="display:inline">My Journal</b> for your day, <b style="display:inline">I Learned</b> for one thing you found out. Each has its own Page every Day.' },
+  { tgt: '.slot', side: 'pl', b: 'Your Days', t: 'Each Day gets an Island here, with its Title. You can write until 02:00, then the Day closes. <kbd>⌘/</kbd> shows formatting shortcuts.' },
+];
+function renderCoach() {
+  const el = document.getElementById('coach');
+  if (S.scen !== 'first' || S.fr !== 'F3' || S.coach >= COACH.length || (S.narrow && COACH[S.coach].tgt === '.slot' && !S.dopen)) { el.innerHTML = ''; return; }
+  const c = COACH[S.coach], t = document.querySelector(c.tgt); if (!t) return;
+  const r = t.getBoundingClientRect(), f = document.getElementById('frame').getBoundingClientRect();
+  let x, y = r.top - f.top + 6, side = c.side;
+  if (c.tgt === '.edwrap') { x = r.left - f.left + 180; y = r.top - f.top + 46; side = 'pt'; }
+  else if (side === 'pr') { x = r.left - f.left - 262; y = r.top - f.top + 110; } else x = r.right - f.left + 12;
+  el.innerHTML = `<div class="coach ${side}" style="left:${x}px;top:${y}px"><b>${c.b}</b>${c.t}<div class="cf"><span>${S.coach + 1} of ${COACH.length}</span>
+    <span><button class="sk" id="cskip">Skip</button><button id="cnext">${S.coach === COACH.length - 1 ? 'Got it' : 'Next'}</button></span></div></div>`;
+  document.getElementById('cnext').onclick = () => { S.coach++; renderCoach(); };
+  document.getElementById('cskip').onclick = () => { S.coach = 9; renderCoach(); };
+}
+
+// ----- shell + bar -----
+function renderNav() {
+  const ic = d => `<svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round">${d}</svg>`;
+  document.getElementById('navtop').innerHTML = `<div class="nav"><a class="on">${ic('<path d="M2 7.5 8 2.5l6 5V14H10v-4H6v4H2z"/>')}Home</a>
+    <a>${ic('<circle cx="8" cy="8" r="5.5"/>')}Filler 1</a><a>${ic('<circle cx="8" cy="8" r="5.5"/>')}Filler 2</a></div>
+    <div class="search"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="7" cy="7" r="5"/><path d="m11 11 4 4"/></svg><span>Search</span><kbd>⌘K</kbd></div><div class="navdiv"></div>`;
+}
+function shell() {
+  document.getElementById('frame').className = S.narrow ? 'narrow' : '';
+  document.getElementById('app').className = ['app', S.narrow ? 'narrow' : '', S.dopen ? 'dopen' : ''].join(' ');
+  setTimeout(renderCoach, S.narrow ? 380 : 0);
+}
+function bar() {
+  document.getElementById('vn').textContent = `${S.v} · ${V[S.v]}`;
+  document.getElementById('scen').textContent = S.scen === 'first' ? 'Scenario: Day 1 (brand-new user)' : 'Scenario: usual day, 00:40';
+  const fr = document.getElementById('fr'); fr.textContent = `Day 1 hints: ${S.fr} ${FR[S.fr]}`; fr.style.display = S.scen === 'first' ? '' : 'none';
+  document.getElementById('narrow').textContent = S.narrow ? 'Window: 760px (drawer)' : 'Window: wide';
+  document.getElementById('tg').innerHTML = ORDER.map(id => `<button class="${S.on[id] ? '' : 'off'}" data-t="${id}">${NOTE[id].label}</button>`).join(' ');
+  const vis = visible();
+  document.getElementById('order').textContent = vis.length ? 'showing: ' + vis.map(id => NOTE[id].short).join(' › ') : 'no notices';
+  document.querySelectorAll('#tg button').forEach(b => b.onclick = () => {
+    const id = b.dataset.t; S.on[id] = !S.on[id];
+    if (id === 'locked' && S.on.locked) { if (S.scen === 'first') setScen('usual'), S.on.locked = true; S.sel = 1; }
+    if (id === 'verify') { S.resent = false; NOTE.verify.text = () => 'Check your inbox to verify <b>you@example.com</b>.'; }
+    render();
+  });
+}
+function render() { renderRail(); renderPage(); bar(); shell(); }
+function setVariant(v) { S.v = v; history.replaceState(null, '', '?variant=' + v); render(); }
+const cyc = n => setVariant(VK[(VK.indexOf(S.v) + n + VK.length) % VK.length]);
+document.getElementById('prev').onclick = () => cyc(-1);
+document.getElementById('next').onclick = () => cyc(1);
+document.getElementById('vn').onclick = () => cyc(1);
+document.getElementById('scen').onclick = () => { setScen(S.scen === 'first' ? 'usual' : 'first'); render(); };
+document.getElementById('fr').onclick = () => { S.fr = { F1: 'F2', F2: 'F3', F3: 'F1' }[S.fr]; setScen('first'); render(); };
+document.getElementById('narrow').onclick = () => { S.narrow = !S.narrow; S.dopen = false; render(); };
+document.getElementById('reset').onclick = () => { setScen(S.scen); render(); };
+document.getElementById('rail').onclick = e => { const s = e.target.closest('.slot'); if (s) { S.sel = +s.dataset.i; S.dopen = false; render(); } };
+document.getElementById('scrim').onclick = () => { S.dopen = false; shell(); };
+document.getElementById('frame').addEventListener('click', e => {
+  const b = e.target.closest('[data-n]'); if (b) { e.preventDefault(); return b.dataset.w === 'dismiss' ? (S.on[b.dataset.n] = false, render()) : act(b.dataset.n, b.dataset.w); }
+  const p = e.target.closest('[data-pick]'); if (p) { S.cPick = p.dataset.pick; renderPage(); }
+});
+document.getElementById('ks').onclick = e => { if (e.target.id === 'ks') e.currentTarget.classList.remove('on'); };
+addEventListener('keydown', e => {
+  if ((e.metaKey || e.ctrlKey) && e.key === '/') { e.preventDefault(); document.getElementById('ks').classList.toggle('on'); return; }
+  if (e.key === 'Escape') document.getElementById('ks').classList.remove('on');
+  if (e.target.closest('input, textarea, [contenteditable]')) return;
+  if (e.key === 'ArrowLeft') cyc(-1);
+  if (e.key === 'ArrowRight') cyc(1);
+});
+addEventListener('resize', renderCoach);
+setInterval(() => { // "Not saved" counts down and retries with backoff; the text updates in place
+  if (!S.on.unsaved) return; S.retry = S.retry <= 1 ? 8 : S.retry - 1;
+  document.querySelectorAll('.ntx').forEach(n => { if (n.textContent.startsWith('Not saved')) n.innerHTML = NOTE.unsaved.text(); });
+}, 1000);
+setScen('first'); renderNav(); render();
+</script>
+</body>
+</html>

@@ -37,7 +37,7 @@ Settled with the user on 2026-11-25 over three grilling rounds. The storage ques
   | Toggle a checkbox | ⌘Enter, or click |
 
   Pressing a block shortcut a second time turns it back into a paragraph. Pressing Enter on an empty list item ends the list. On Windows and Linux, Ctrl takes the place of ⌘.
-- **Discoverability**: **⌘/ opens a shortcut sheet** (a quiet overlay). The sheet is also reachable from a sidebar item and mentioned once in the first-run experience. No hints appear on the Page itself.
+- **Discoverability**: **⌘/ opens a shortcut sheet** (a quiet overlay). The sheet is also reachable from the first row in Settings (per [Sidebar nav and Settings](13-sidebar-nav-and-settings.md)) and mentioned once in the first-run experience. No hints appear on the Page itself.
 - **Title**: the first block of the *My Journal* Page is **always a plain paragraph**. Inline marks are allowed in it, block formats are not. The Island shows the Title in plain text.
 - **Island hover glimpse**: plain text only, with no checkbox or list markers.
 - **Pasting**: only formatting in the v1 set is kept, and everything else is dropped. Link text stays, without the link. ⌘⇧V pastes as plain text.

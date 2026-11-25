@@ -45,8 +45,8 @@ Settled with the user on 2026-11-25 over three grilling rounds.
 | `POST /auth/verify/resend` | Generic response. |
 | `POST /auth/password/forgot` | `{email}`, generic response. Also the way a Google-only user adds a password. |
 | `POST /auth/password/reset` | `{token, password}`. Deletes all of the user's sessions. |
-| `GET /me` | `{email, emailVerified, plan, timezone, pendingTimezone, firstDay, today, graceUntil}` |
-| `PATCH /me` | `{timezone}` records a pending switch. |
+| `GET /me` | `{email, emailVerified, signInMethods, plan, timezone, pendingTimezone, firstDay, today, graceUntil}` |
+| `PATCH /me` | `{timezone}` records a pending switch. Sending the current effective zone clears it. |
 | `DELETE /me` | Soft delete. |
 
 - Email links open SPA routes (`/verify?token=…`, `/reset?token=…`), and the page **POSTs** the token, so link-scanners that send a GET can't use up single-use tokens.
@@ -91,6 +91,7 @@ Settled with the user on 2026-11-25 over three grilling rounds.
 - The client searches from 1 character, 200ms after typing stops, and cancels the previous request with `AbortController`. That stays well under the 300 requests/min limit alongside autosave.
 
 - **From [Search results UI](14-search-results-ui.md) (2026-11-25):** each result also carries `title` (the Title derived from `plain_text`, empty for I Learned), so results are `{day, notebook, title, snippet}`. Date words (weekday, day, month, year) match like text through the tsvector, so the query needs no date parsing. If only the date matches, the snippet is the start of the Page with nothing marked.
+- **From [Sidebar nav and Settings](13-sidebar-nav-and-settings.md) (2026-11-25):** `GET /me` gains `signInMethods` (a subset of `["password","google"]`), so Settings can show "Set a password" or "Change" and the Google status. `PATCH /me` with the current effective zone clears a pending switch (Settings' Cancel).
 
 **Deferred**: HTTP response compression, turned on only if production numbers show a benefit (unchanged from the Context above).
 
