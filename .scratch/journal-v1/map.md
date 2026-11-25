@@ -31,11 +31,11 @@ A **v1 build spec for the Zoop web app**: product behaviour, data model, API con
 - [Email provider for verification and password reset](issues/01-email-provider.md): Resend (free 3k/mo, 100/day cap, official Go SDK) behind a `Mailer` interface. Upgrade to Pro before daily volume nears 100.
 - [Journal page look and feel](issues/05-journal-page-prototype.md): Apple-minimal white sheet with no lines and a small date. Notebooks sit in an inset index column on the right. The left sidebar holds placeholder nav, search, then Islands that push down on hover and load lazily. The winner is T4 in prototypes/journal-page-v3.
 - [Go backend building blocks](issues/02-go-backend-building-blocks.md): chi router (user's override), pgx + sqlc, goose, x/oauth2 + go-oidc (PKCE), Argon2id, and a STORED tsvector + GIN index queried with `to_tsquery` prefix. The ticket lists pitfalls for the data model.
+- [Island rail and hover expansion](issues/06-island-rail-prototype.md): newest first with sticky month headers. A scrubber on the right edge never scrolls: months for this year and last, then one segment per older year with a hover month grid. Pulsing green dot for the Grace Window, Spring motion, slide-over drawer when narrow. Jumps load only the target month, so the API needs paging from any date plus a per-month summary.
 
 ## Not yet specified
 
 - **Search results UI**: the search box sits at the top of the left sidebar, which is decided. How results display (a dropdown, replacing the rail, or over the sheet) is still open.
-- **Rail at scale**: the rail loads Days in batches as you scroll, which is decided. Still open: the API's paging shape, whether to virtualise, and jump-to-month. This waits on the data model and API contract.
 - **Privacy and data ownership**: journals are intimate. Open questions are encryption at rest or per-user encryption, account deletion, and data export.
 - **Sidebar nav items**: what Home / Filler 1 / Filler 2 really are (for example settings, account, a calendar view). The user expects 2–3 buttons.
 - **First-run experience**: what a brand-new user sees on Day 1 (empty state, hints about the two Notebooks).

@@ -1,0 +1,550 @@
+<!doctype html>
+<!--
+  PROTOTYPE, throwaway. VERDICT (2026-11-25): R4 + scrubber S3, Grace marker dot, D1 drawer, Spring motion, 150ms delay; see the ticket's Answer.
+  Ticket: "Island rail and hover expansion" (.scratch/journal-v1/issues/06-island-rail-prototype.md)
+  Built on T4 of journal-page-v3-PROTOTYPE.html (the page itself is unchanged; only the left rail varies).
+  Plan: three structurally different rails, switchable via ?variant=R1|R2|R3, the ← / → keys or the bottom bar.
+    R1  Timeline: newest first, sticky month headers; click a header → month picker (jump-to-month); Grace = pulsing green dot.
+    R2  Diary: oldest first, anchored at the bottom with Today last (chat-style); month scrubber on the right edge; Grace = green ring + "48m left".
+    R3  Months: newest first, one accordion per month (current month open), dot strip per closed month; Grace = draining bar.
+    R4  (round 2, after user picked "R1 newest first with scrubber") R1's newest-first timeline + sticky headers, R2's scrubber (newest month at top,
+        current month highlighted while scrolling) instead of the month picker. Grace marker switchable via the bar (dot / ring / bar).
+  Round 3 (user: "the scrubber, when it gets really long what happens?"): History control fakes 3 / 10 / 25 years of Days.
+    S1  Continuous: ticks thin out (only year ticks below 3px per month), year labels thin out (every Nth year), drag or hover anywhere
+        to get a bubble naming the month under the pointer, release or click to jump.
+    S2  Years: one segment per year; hovering a year opens a 12-month grid beside it; click a month to jump.
+    S3  (round 4, user: "first 2 years of S1, so this year and last year, afterwards back [to years]") months for this calendar year and last,
+        then one segment per older year (hover → 12-month grid). Slots ≤ 18px, shrinking so the whole scrubber always fits the rail.
+    S4  Same as S3 but with fixed 16px slots, and the scrubber scrolls on its own when it runs out of room (to judge whether that looks bad).
+  Jumps no longer load every Day in between: the rail shows a window starting at the target month and loads newer Days upward on scroll.
+  Bottom bar also toggles: Grace Window, a simulated narrow (760px) window with two drawer styles (D1 slide-over, D2 mini rail),
+  hover delay (0 / 150 / 300ms) and motion curve. No persistence; edits live in memory until reload.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Zoop: Island rail PROTOTYPE</title>
+<style>
+  :root {
+    --bg: #f5f5f7; --sheet: #ffffff; --ink: #1d1d1f; --ink2: #6e6e73; --ink3: #a1a1a6; --island: #0b0b0c;
+    --hd: .15s; --ease: cubic-bezier(.32,1.25,.5,1); --dur: .45s;
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: #dcdce0; color: var(--ink); overflow: hidden; }
+  #frame { position: relative; height: 100vh; margin: 0 auto; width: 100%; background: var(--bg); overflow: hidden; }
+  #frame.narrow { width: 760px; box-shadow: 0 0 0 1px #c7c7cc, 0 10px 40px rgba(0,0,0,.12); }
+  #frame.narrow::before { content: '760px window'; position: absolute; top: 6px; right: 10px; font: 500 10px system-ui; color: var(--ink3); z-index: 50; }
+  .app { display: flex; height: 100%; }
+
+  /* ---------- sidebar ---------- */
+  .left { width: 300px; flex: none; height: 100%; display: flex; flex-direction: column; background: var(--bg); }
+  #navtop { padding: 22px 12px 6px 18px; width: 300px; }
+  .nav { display: flex; flex-direction: column; gap: 1px; }
+  .nav a { display: flex; align-items: center; gap: 10px; padding: 7px 10px; border-radius: 8px; font-size: 13.5px; color: var(--ink); cursor: pointer; white-space: nowrap; }
+  .nav a:hover { background: rgba(0,0,0,.05); }
+  .nav a.on { background: rgba(0,0,0,.07); font-weight: 600; }
+  .nav svg { color: var(--ink2); flex: none; }
+  .search { margin-top: 8px; display: flex; align-items: center; gap: 6px; background: #e8e8ed; border-radius: 9px; padding: 6px 10px; color: var(--ink3); font-size: 12.5px; }
+  .search input { border: 0; background: transparent; outline: none; font: inherit; color: var(--ink); width: 100%; }
+  .navdiv { height: 1px; background: #e2e2e7; margin: 12px 4px 0; }
+  #railwrap { position: relative; flex: 1; min-height: 0; width: 300px; }
+  .rail { height: 100%; overflow-y: auto; padding: 4px 12px 110px 18px; scrollbar-width: none;
+    -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 60px), transparent 100%); mask-image: linear-gradient(to bottom, #000 calc(100% - 60px), transparent 100%); }
+  .rail::-webkit-scrollbar { display: none; }
+  .R2 .rail { padding: 24px 30px 90px 18px; -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 40px); mask-image: linear-gradient(to bottom, transparent 0, #000 40px); }
+
+  /* ---------- Islands ---------- */
+  .slot { margin-bottom: 6px; }
+  .isl { position: relative; width: 100%; min-height: 28px; border-radius: 14px; background: var(--island); color: #f5f5f7; cursor: pointer; overflow: hidden;
+    transition: width .35s var(--ease), border-radius var(--dur) var(--ease), box-shadow .3s ease; }
+  .row0 { display: flex; align-items: center; gap: 10px; height: 28px; padding: 0 12px; font-size: 12px; white-space: nowrap; }
+  .d { font-weight: 600; font-variant-numeric: tabular-nums; min-width: 46px; }
+  .dn { display: none; width: 100%; text-align: center; font-weight: 600; font-size: 11px; font-variant-numeric: tabular-nums; }
+  .sep { width: 1px; height: 12px; background: rgba(255,255,255,.22); flex: none; }
+  .t { color: #d2d2d7; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; flex: 1; }
+  .more { display: grid; grid-template-rows: 0fr; opacity: 0; transition: grid-template-rows var(--dur) var(--ease), opacity .25s ease; }
+  .more > div { overflow: hidden; }
+  .nbrow { padding: 0 14px 10px; font-size: 12px; line-height: 1.4; }
+  .nbrow b { display: block; font-size: 10.5px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: #8e8e93; margin-bottom: 2px; }
+  .nbrow span { color: #e5e5ea; }
+  .gopen { padding: 0 14px 10px; font-size: 11px; color: #30d158; }
+  .slot:hover .isl { border-radius: 18px; box-shadow: 0 6px 16px rgba(0,0,0,.14); transition-delay: var(--hd); }
+  .slot:hover .more { grid-template-rows: 1fr; opacity: 1; transition-delay: var(--hd); }
+  .slot.empty .isl { background: #d8d8dd; color: #6e6e73; }
+  .slot.empty .t, .slot.empty .sep { display: none; }
+  .slot.sel .isl { outline: 2px solid #0a84ff; outline-offset: 2px; }
+  .ph { height: 28px; border-radius: 14px; margin-bottom: 6px; background: linear-gradient(90deg, #e3e3e8 0%, #efeff3 50%, #e3e3e8 100%); background-size: 200% 100%; animation: shimmer 1.1s linear infinite; }
+  @keyframes shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+  .railend { text-align: center; font-size: 11px; color: var(--ink3); padding: 12px 0; }
+
+  /* Grace markers, one per variant */
+  .gdot { width: 7px; height: 7px; border-radius: 50%; background: #30d158; flex: none; margin-left: auto; box-shadow: 0 0 6px #30d158; animation: pulse 2s ease-in-out infinite; }
+  @keyframes pulse { 50% { opacity: .35; box-shadow: 0 0 2px #30d158; } }
+  .slot.ring .isl { box-shadow: 0 0 0 2px var(--bg), 0 0 0 3.5px #30d158; }
+  .gleft { margin-left: auto; color: #30d158; font-size: 11px; font-weight: 600; }
+  .gbar { position: absolute; left: 0; bottom: 0; height: 2.5px; background: #30d158; border-radius: 0 2px 2px 0; }
+  .otag { margin-left: auto; font-size: 10px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: #0b0b0c; background: #30d158; padding: 1px 6px; border-radius: 999px; }
+
+  /* R1: sticky month headers + picker */
+  .month { font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--ink3); padding: 14px 0 8px 12px; }
+  .R1 .month { position: sticky; top: -4px; z-index: 2; background: var(--bg); cursor: pointer; }
+  .R1 .month:hover { color: var(--ink); }
+  .R1 .month::after { content: ' ⌄'; }
+  #picker { position: absolute; left: 14px; right: 10px; top: 8px; z-index: 10; background: #fff; border-radius: 14px; padding: 12px; box-shadow: 0 12px 40px rgba(0,0,0,.16), 0 0 0 .5px rgba(0,0,0,.08); max-height: calc(100% - 20px); overflow: auto; }
+  #picker .yr { font-size: 12px; font-weight: 650; margin: 8px 4px 6px; }
+  #picker .gr { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; }
+  #picker .mo { font-size: 12px; text-align: center; padding: 6px 0; border-radius: 8px; cursor: pointer; position: relative; }
+  #picker .mo:hover { background: #f0f0f3; }
+  #picker .mo.cur { font-weight: 650; }
+  #picker .mo.off { color: #d1d1d6; pointer-events: none; }
+  #picker .mo i { position: absolute; left: 30%; right: 30%; bottom: 2px; height: 2px; border-radius: 1px; background: var(--ink); }
+
+  /* R2: scrubber */
+  #scrub { position: absolute; right: 4px; top: 20px; bottom: 110px; width: 22px; display: none; cursor: pointer; touch-action: none; }
+  #scrub.scrolls { overflow-y: auto; scrollbar-width: none; -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 14px, #000 calc(100% - 14px), transparent 100%); mask-image: linear-gradient(to bottom, transparent 0, #000 14px, #000 calc(100% - 14px), transparent 100%); }
+  #scrub.scrolls::-webkit-scrollbar { display: none; }
+  #scrub .tk { position: absolute; right: 2px; height: 1.5px; border-radius: 1px; background: #c7c7cc; pointer-events: none; }
+  #scrub .tk.yt { background: #8e8e93; }
+  #scrub .y { position: absolute; right: 0; transform: translateY(-50%); font-size: 9px; font-weight: 650; color: var(--ink2); background: var(--bg); padding: 1px 0; pointer-events: none; }
+  #scrub .now { position: absolute; left: 0; width: 5px; height: 5px; margin-top: -1.5px; border-radius: 50%; background: var(--ink); pointer-events: none; transition: top .2s; }
+  #scrub .ys { position: absolute; left: 0; right: 0; }
+  #scrub .ys:hover, #scrub .ys.hot { background: rgba(0,0,0,.06); border-radius: 4px; }
+  #sbub { display: none; position: absolute; right: 30px; transform: translateY(-50%); z-index: 12; white-space: nowrap; background: var(--island); color: #fff; font-size: 11px; font-weight: 600; padding: 4px 9px; border-radius: 999px; pointer-events: none; }
+  #sbub.on { display: block; }
+  #ypop { display: none; position: absolute; right: 30px; z-index: 12; width: 176px; background: #fff; border-radius: 12px; padding: 10px; box-shadow: 0 12px 40px rgba(0,0,0,.16), 0 0 0 .5px rgba(0,0,0,.08); }
+  #ypop.on { display: block; }
+  #ypop b { display: block; font-size: 12px; margin: 0 2px 6px; }
+  #ypop .gr { display: grid; grid-template-columns: repeat(4, 1fr); gap: 3px; }
+  #ypop .mo { font-size: 11.5px; text-align: center; padding: 5px 0; border-radius: 7px; cursor: pointer; position: relative; }
+  #ypop .mo:hover { background: #f0f0f3; }
+  #ypop .mo.off { color: #d1d1d6; pointer-events: none; }
+  #ypop .mo i { position: absolute; left: 30%; right: 30%; bottom: 2px; height: 2px; border-radius: 1px; background: var(--ink); }
+  .R2 #scrub, .R4 #scrub { display: flex; }
+  .R4 .rail { padding-right: 30px; }
+  .R4 .month { position: sticky; top: -4px; z-index: 2; background: var(--bg); }
+
+  /* R3: month accordion */
+  .mg { margin-bottom: 6px; }
+  .mh { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 10px; cursor: pointer; font-size: 13px; }
+  .mh:hover { background: rgba(0,0,0,.05); }
+  .mh .mn { font-weight: 650; }
+  .mh .mc { color: var(--ink3); font-size: 11.5px; margin-left: auto; font-variant-numeric: tabular-nums; }
+  .mh .chev { color: var(--ink3); transition: transform .25s; }
+  .mg.open .chev { transform: rotate(90deg); }
+  .strip { display: flex; flex-wrap: wrap; gap: 3px; padding: 0 10px 6px; }
+  .strip .dd { width: 6px; height: 6px; border-radius: 50%; background: #d8d8dd; cursor: pointer; }
+  .strip .dd.w { background: var(--island); }
+  .strip .dd:hover { transform: scale(1.6); }
+  .mg.open .strip { display: none; }
+  .mbody { display: none; padding: 2px 0 8px; }
+  .mg.open .mbody { display: block; }
+  .mshort { display: none; }
+
+  /* ---------- narrow window: drawers ---------- */
+  #hamb, #scrim { display: none; }
+  .narrow .main { padding-left: 64px; }
+  .narrow.D1 .left { position: absolute; left: 0; top: 0; bottom: 0; z-index: 20; transform: translateX(-100%); transition: transform .35s cubic-bezier(.25,.8,.25,1); box-shadow: 0 0 40px rgba(0,0,0,.18); }
+  .narrow.D1.dopen .left { transform: none; }
+  .narrow.D1 #hamb { display: flex; position: absolute; left: 14px; top: 22px; z-index: 5; width: 34px; height: 34px; border-radius: 10px; border: 0; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.12); align-items: center; justify-content: center; cursor: pointer; }
+  .narrow.D1.dopen #scrim { display: block; position: absolute; inset: 0; z-index: 15; background: rgba(0,0,0,.12); }
+  .narrow.D2 .left { position: absolute; left: 0; top: 0; bottom: 0; z-index: 20; width: 56px; overflow: hidden; transition: width .3s cubic-bezier(.25,.8,.25,1), box-shadow .3s; }
+  .narrow.D2 .left:hover { width: 300px; box-shadow: 0 0 40px rgba(0,0,0,.18); }
+  .narrow.D2 .left:not(:hover) .isl { width: 32px; }
+  .narrow.D2 .left:not(:hover) .row0 > *:not(.dn) { display: none; }
+  .narrow.D2 .left:not(:hover) .row0 { padding: 0; }
+  .narrow.D2 .left:not(:hover) .dn { display: block; }
+  .narrow.D2 .left:not(:hover) .more, .narrow.D2 .left:not(:hover) .strip, .narrow.D2 .left:not(:hover) #scrub,
+  .narrow.D2 .left:not(:hover) .mh .mn, .narrow.D2 .left:not(:hover) .mh .mc, .narrow.D2 .left:not(:hover) .mh .chev { display: none; }
+  .narrow.D2 .left:not(:hover) .mshort { display: inline; font-size: 10px; font-weight: 650; text-transform: uppercase; color: var(--ink3); }
+  .narrow.D2 .left:not(:hover) .mh { padding: 8px 0; }
+  .narrow.D2 .left:not(:hover) .month { font-size: 0; padding: 10px 0 4px; }
+  .narrow.D2 .left:not(:hover) .month::after { content: attr(data-s); font-size: 10px; }
+  .narrow.D2 .left:not(:hover) .rail { padding-left: 12px; padding-right: 0; }
+  .narrow.D2 .left:not(:hover) .search { width: 32px; padding: 6px 9px; }
+  .narrow.D2 .left:not(:hover) #navtop { padding-left: 10px; }
+  .narrow.D2 .left:not(:hover) .nav a { font-size: 0; width: 34px; }
+  .narrow.D2 .left:not(:hover) .gbar { display: none; }
+  .narrow.D2 .left:not(:hover) .slot.grace .isl { background: #30d158; color: #0b0b0c; }
+
+  /* ---------- Page (T4 from v3, unchanged) ---------- */
+  .main { position: relative; flex: 1; height: 100%; overflow-y: auto; display: flex; justify-content: center; padding: 24px 56px 120px 8px; }
+  .sheet { position: relative; width: 100%; max-width: 860px; min-height: calc(100vh - 48px); background: var(--sheet); border-radius: 18px;
+    box-shadow: 0 1px 1px rgba(0,0,0,.03), 0 8px 28px rgba(0,0,0,.05); padding: 64px 140px 80px 96px; }
+  .narrow .sheet { padding: 56px 100px 80px 48px; }
+  .head { margin-bottom: 32px; }
+  .dow { font-size: 12px; font-weight: 500; color: var(--ink3); margin-bottom: 3px; display: flex; align-items: center; gap: 10px; }
+  .date { font-size: 19px; font-weight: 600; letter-spacing: -.01em; }
+  .badge { font-size: 11px; font-weight: 500; color: var(--ink2); background: var(--bg); padding: 3px 9px; border-radius: 999px; }
+  .badge.live { color: #248a3d; background: #e3f6e8; }
+  .ed { outline: none; white-space: pre-wrap; word-wrap: break-word; font-size: 17px; line-height: 1.65; min-height: 60vh; caret-color: #0a84ff; }
+  .ed > div:first-child { font-size: 21px; font-weight: 650; letter-spacing: -.015em; line-height: 1.35; margin-bottom: 14px; }
+  .ed:empty::before, .ed > div:only-child:has(br:only-child)::before { content: 'Title'; color: var(--ink3); }
+  .ro .ed { color: #48484a; cursor: default; }
+  .notitle .ed > div:first-child { font-size: 17px; font-weight: 400; letter-spacing: 0; line-height: 1.65; margin: 0; }
+  .tabs { position: absolute; top: 0; bottom: 0; right: 0; width: 52px; border-left: 1px solid #efeff2; display: flex; flex-direction: column; padding-top: 64px; }
+  .tab { writing-mode: vertical-rl; padding: 16px 0; text-align: center; font-size: 11px; font-weight: 500; letter-spacing: .08em; text-transform: uppercase; color: var(--ink3); cursor: pointer; }
+  .tab:hover { color: var(--ink2); }
+  .tab.on { color: var(--ink); font-weight: 650; box-shadow: inset 2px 0 0 var(--ink); }
+
+  /* motion lab (prototype only) */
+  #lab { display: none; position: fixed; inset: 0; z-index: 90; background: var(--bg); padding: 40px 40px 100px; overflow: auto; }
+  #lab.on { display: block; }
+  #lab h3 { margin: 0 0 4px; font-size: 15px; } #lab p { margin: 0 0 24px; font-size: 12.5px; color: var(--ink2); }
+  #lab .cols { display: flex; flex-wrap: wrap; gap: 22px; align-items: flex-start; }
+  #lab .col { width: 230px; flex: none; }
+  #lab .col h4 { margin: 0 0 2px; font-size: 13px; } #lab .col small { display: block; font-size: 11px; color: var(--ink3); margin-bottom: 12px; font-family: ui-monospace, monospace; }
+  /* prototype controls (not part of the design) */
+  #bar { position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%); background: rgba(30,30,32,.94); color: #fff; border-radius: 20px; white-space: nowrap; flex-wrap: wrap; justify-content: center; max-width: 94vw;
+    display: flex; align-items: center; gap: 4px; padding: 6px; font: 500 12px system-ui, sans-serif; box-shadow: 0 6px 24px rgba(0,0,0,.3); z-index: 99; }
+  #bar span { padding: 0 8px; color: #8e8e93; }
+  #bar button { background: #3a3a3c; color: #fff; border: 0; border-radius: 999px; padding: 7px 11px; cursor: pointer; font: inherit; }
+  #bar button:disabled { opacity: .35; cursor: default; }
+  #bar #vn { background: #fff; color: #000; font-weight: 650; }
+</style>
+</head>
+<body>
+<div id="frame"><div class="app" id="app">
+  <aside class="left"><div id="navtop"></div><div id="railwrap"><nav class="rail" id="rail"></nav><div id="scrub"></div><div id="sbub"></div><div id="ypop"></div></div></aside>
+  <main class="main" id="main"></main>
+  <div id="scrim"></div>
+</div></div>
+<div id="lab"></div>
+<div id="bar"><span>PROTOTYPE</span><button id="prev">←</button><button id="vn"></button><button id="next">→</button>
+  <button id="grace"></button><button id="gm"></button><button id="narrow"></button><button id="drawer"></button><button id="hd"></button><button id="ease"></button><button id="hist"></button><button id="smode"></button><button id="labb">Compare motion</button><span id="ld"></span></div>
+<script>
+// ----- fake data: signup 8 Jan 2024 → today 25 Nov 2026, it is 01:12 if the Grace Window is on -----
+const TODAY = new Date(2026, 10, 25);
+let SIGNUP;
+const NBS = ['My Journal', 'I Learned'];
+const J = [
+  ['Finally fixed the bike chain', 'Spent most of the morning with grease up to my elbows. It turned out the derailleur was bent, not the chain. Walked to the market after and bought too many clementines.'],
+  ['Rain all day', 'Stayed in and read. Made soup from whatever was left in the fridge, which was mostly leeks.'],
+  ['Long call with Mum', 'She is thinking about selling the house. I said nothing useful but listened, which seemed to be the point.'],
+  ['First frost', 'The car windscreen was white at seven. Scraped it with a library card.'],
+  ['Shipped the thing', 'Three weeks of work went out at 4pm and nobody noticed, which is the best possible outcome.'],
+  ['Couldn\'t sleep', 'Up at 3 making a list of everything I have been putting off. The list was shorter than I feared.'],
+  ['Swim', 'Forty lengths. The lane next to me had a man doing butterfly very slowly, like a sad dolphin.'],
+];
+const L = ['to_tsquery with :* matches prefixes, so "jour:*" finds journal and journey.', 'Leeks need washing twice: grit hides between the layers near the root.',
+  'Octopuses taste with their arms.', 'chi middleware is just func(http.Handler) http.Handler.', 'The Dynamic Island animates with a spring, not an ease curve.'];
+const mk = d => d.getFullYear() * 12 + d.getMonth();
+let days, byMonth, MONTHS;
+function gen(years) {
+SIGNUP = years === 3 ? new Date(2024, 0, 8) : new Date(TODAY.getFullYear() - years, 0, 8);
+days = []; byMonth = {};
+for (let d = new Date(TODAY), i = 0; d >= SIGNUP; d.setDate(d.getDate() - 1), i++) {
+  const r = (i * 7919) % 13, has = i < 2 || r > 3, hasL = has && r % 3 !== 0;
+  const day = { date: new Date(d), i, k: mk(d), pages: { 'My Journal': has ? J[i % J.length].join('\n') : '', 'I Learned': hasL ? 'Today I learned\n' + L[i % L.length] : '' } };
+  days.push(day); (byMonth[day.k] ||= []).push(day);
+}
+MONTHS = Object.keys(byMonth).map(Number).sort((a, b) => b - a); // newest first
+}
+gen(3);
+const V = { R1: 'Timeline · newest first', R2: 'Diary · oldest first, Today at bottom', R3: 'Months · accordion', R4: 'Timeline + scrubber' }, VK = Object.keys(V);
+const EASES = [['Spring', 'cubic-bezier(.32,1.25,.5,1)', '.45s'], ['Soft', 'cubic-bezier(.25,.8,.25,1)', '.6s'], ['Snappy', 'cubic-bezier(.2,1.5,.4,1)', '.28s'], ['None', 'linear', '0s']];
+const LAB = [['Spring', 'cubic-bezier(.32,1.25,.5,1)', '.45s', 'current: slight overshoot'], ['Gentle spring', 'cubic-bezier(.34,1.12,.64,1)', '.5s', 'smaller overshoot'],
+  ['Soft', 'cubic-bezier(.25,.8,.25,1)', '.6s', 'ease-out, no overshoot'], ['Snappy', 'cubic-bezier(.2,1.5,.4,1)', '.28s', 'quick, bouncy'], ['None', 'linear', '0s', 'instant']];
+const BATCH = 40;
+const qv = new URLSearchParams(location.search).get('variant');
+const S = { v: VK.includes(qv) ? qv : 'R4', loaded: BATCH, sel: 0, nb: 'My Journal', grace: true, narrow: false, drawer: 'D1', dopen: false,
+  hd: 150, ease: 0, years: 3, sm: 'S3', from: 0, openMonths: new Set([MONTHS[0]]), monthLoaded: new Set([MONTHS[0]]), picker: false };
+let loading = false, io = null;
+
+const fmt = (d, o) => d.toLocaleDateString('en-GB', o);
+const esc = s => s.replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]);
+const title = day => day.pages['My Journal'].split('\n')[0];
+const written = day => NBS.some(n => day.pages[n]);
+const writable = day => day.i === 0 || (day.i === 1 && S.grace);
+const glimpse = t => { const s = t.replace(/\n/g, ' · '); return s.length > 80 ? s.slice(0, 80).trimEnd() + '…' : s; };
+const mname = (k, o = { month: 'long', year: 'numeric' }) => fmt(new Date(Math.floor(k / 12), k % 12, 1), o);
+
+function island(day) {
+  const filled = NBS.filter(n => day.pages[n]), g = S.grace && day.i === 1;
+  const label = day.i === 0 ? 'Today' : day.i === 1 ? 'Yesterday' : fmt(day.date, { weekday: 'short', day: 'numeric' });
+  let mark = '', cls = '', bar = '';
+  const G = S.g;
+  if (g && G === 'dot') mark = '<span class="gdot"></span>';
+  if (g && G === 'ring') { mark = '<span class="gleft">48m left</span>'; cls = 'ring'; }
+  if (g && G === 'bar') { mark = '<span class="otag">open</span>'; bar = '<span class="gbar" style="width:40%"></span>'; }
+  return `<div class="slot ${filled.length ? '' : 'empty'} ${day.i === S.sel ? 'sel' : ''} ${g ? 'grace' : ''} ${cls}" data-i="${day.i}">
+    <div class="isl">
+      <div class="row0"><span class="dn">${day.date.getDate()}</span><span class="d">${label}</span><span class="sep"></span><span class="t">${esc(title(day))}</span>${mark}</div>
+      <div class="more"><div>
+        ${g ? '<div class="gopen">Still open until 02:00 · 48 min left</div>' : ''}
+        ${filled.map(n => `<div class="nbrow"><b>${n}</b><span>${esc(glimpse(day.pages[n]))}</span></div>`).join('')}
+      </div></div>${bar}
+    </div></div>`;
+}
+const monthHead = k => `<div class="month" data-mk="${k}" data-s="${mname(k, { month: 'short' })}">${mname(k)}</div>`;
+const shimmer = n => '<div class="ph"></div>'.repeat(n);
+
+function railHTML() {
+  if (S.v === 'R3') {
+    return MONTHS.map(k => {
+      const ds = byMonth[k], open = S.openMonths.has(k), w = ds.filter(written).length;
+      const body = !open ? '' : S.monthLoaded.has(k) ? ds.map(island).join('') : shimmer(Math.min(ds.length, 6));
+      return `<div class="mg ${open ? 'open' : ''}" data-mk="${k}">
+        <div class="mh"><span class="mshort">${mname(k, { month: 'short' })}</span><span class="mn">${mname(k, k >= MONTHS[0] - TODAY.getMonth() ? { month: 'long' } : undefined)}</span><span class="mc">${w} of ${ds.length}</span><span class="chev">›</span></div>
+        <div class="strip">${[...ds].reverse().map(d => `<span class="dd ${written(d) ? 'w' : ''}" data-i="${d.i}" title="${fmt(d.date, { weekday: 'short', day: 'numeric', month: 'short' })}${title(d) ? ' · ' + esc(title(d)) : ''}"></span>`).join('')}</div>
+        <div class="mbody">${body}</div></div>`;
+    }).join('') + `<div class="railend">You started here · ${fmt(SIGNUP, { day: 'numeric', month: 'long', year: 'numeric' })}</div>`;
+  }
+  const from = S.v === 'R2' ? 0 : S.from;
+  let list = days.slice(from, S.loaded);
+  if (S.v === 'R2') list = list.reverse();
+  let html = '', month = null;
+  for (const day of list) { if (day.k !== month) { html += monthHead(day.k); month = day.k; } html += island(day); }
+  const more = S.loaded < days.length;
+  const end = `<div class="railend">You started here · ${fmt(SIGNUP, { day: 'numeric', month: 'long', year: 'numeric' })}</div>`;
+  const sent = `<div id="sentinel">${shimmer(3)}</div>`;
+  const top = from > 0 ? `<div id="sentinelTop">${shimmer(3)}</div>` : '';
+  return S.v === 'R2' ? (more ? sent : end) + html : top + html + (more ? sent : end);
+}
+
+function renderRail(keepBottom) {
+  const rail = document.getElementById('rail'), st = rail.scrollTop;
+  rail.innerHTML = railHTML() + (S.picker ? '' : '');
+  rail.scrollTop = keepBottom != null ? rail.scrollHeight - keepBottom : st;
+  if (io) io.disconnect();
+  io = new IntersectionObserver(es => {
+    const e = es.find(x => x.isIntersecting);
+    if (!e || loading) return;
+    loading = true;
+    setTimeout(() => { // pretend API page fetch: older Days below, or newer Days above after a jump
+      const fromBottom = rail.scrollHeight - rail.scrollTop;
+      if (e.target.id === 'sentinelTop') { S.from = Math.max(0, S.from - BATCH); loading = false; renderRail(fromBottom); }
+      else { S.loaded += BATCH; loading = false; renderRail(S.v === 'R2' ? fromBottom : null); }
+      updateBar();
+    }, 350);
+  }, { root: rail, rootMargin: '300px' });
+  ['sentinel', 'sentinelTop'].forEach(id => { const el = document.getElementById(id); if (el) io.observe(el); });
+  renderScrub(); renderPicker(); markScrub();
+}
+let G = null; // scrubber geometry: items[] top-to-bottom, each { t: 'm', k } or { t: 'y', y }, with a slot height
+const SM = { S1: 'S1 continuous', S2: 'S2 years', S3: 'S3 2y months + years, fits', S4: 'S3 but scrolls' };
+function curMonth() {
+  const rail = document.getElementById('rail');
+  let k = null;
+  for (const h of rail.querySelectorAll('.month')) { if (h.offsetTop <= rail.scrollTop + 12) k = +h.dataset.mk; else break; }
+  return k ?? +rail.querySelector('.month')?.dataset.mk;
+}
+function posOf(k) {
+  const j = G.items.findIndex(it => it.t === 'm' ? it.k === k : it.y === Math.floor(k / 12));
+  const it = G.items[j];
+  return j * G.slot + (it.t === 'm' ? .5 : ((11 - k % 12) + .5) / 12) * G.slot;
+}
+function markScrub() {
+  const now = document.querySelector('#scrub .now');
+  if (!now || !G) return;
+  const t = posOf(curMonth()); now.style.top = t - 1 + 'px';
+  const el = document.getElementById('scrub'); // S4: keep the marker in view
+  if (G.scroll && (t < el.scrollTop + 20 || t > el.scrollTop + el.clientHeight - 20)) el.scrollTop = t - el.clientHeight / 2;
+}
+document.getElementById('rail').addEventListener('scroll', markScrub);
+addEventListener('resize', () => { renderScrub(); markScrub(); });
+
+function renderScrub() {
+  const el = document.getElementById('scrub');
+  el.classList.toggle('scrolls', S.v === 'R4' && S.sm === 'S4');
+  if (S.v !== 'R2' && S.v !== 'R4') { el.innerHTML = ''; G = null; return; }
+  const H = el.clientHeight, yl = y => '’' + String(y).slice(2), mode = S.v === 'R4' ? S.sm : 'S1';
+  const list = S.v === 'R4' ? MONTHS : [...MONTHS].reverse(), yrs = [...new Set(MONTHS.map(k => Math.floor(k / 12)))];
+  let items;
+  if (mode === 'S1') items = list.map(k => ({ t: 'm', k }));
+  else if (mode === 'S2') items = yrs.map(y => ({ t: 'y', y }));
+  else { const cut = (TODAY.getFullYear() - 1) * 12; items = [...MONTHS.filter(k => k >= cut).map(k => ({ t: 'm', k })), ...yrs.filter(y => y * 12 < cut).map(y => ({ t: 'y', y }))]; }
+  const slot = mode === 'S4' ? 16 : mode === 'S3' ? Math.min(18, H / items.length) : H / items.length;
+  G = { items, slot, scroll: mode === 'S4' };
+  let html = '', lastLab = -99;
+  items.forEach((it, j) => {
+    const top = j * slot, t = top + slot / 2;
+    if (it.t === 'y') {
+      html += `<div class="ys" data-y="${it.y}" style="top:${top}px;height:${slot}px"></div><i class="tk yt" style="top:${top}px;width:8px"></i>`;
+      if (t - lastLab >= 11) { html += `<span class="y" style="top:${t}px">${yl(it.y)}</span>`; lastLab = t; }
+      return;
+    }
+    const k = it.k, prev = items[j - 1], ys = !prev || Math.floor(prev.k / 12) !== Math.floor(k / 12);
+    const ds = byMonth[k], dens = ds.filter(written).length / ds.length;
+    if (slot >= 3 || ys) html += `<i class="tk ${ys ? 'yt' : ''}" style="top:${t}px;width:${ys ? 8 : 4 + dens * 6}px"></i>`;
+    if (ys && t - lastLab >= 15) { html += `<span class="y" style="top:${t}px">${yl(Math.floor(k / 12))}</span>`; lastLab = t; }
+  });
+  el.innerHTML = html + `<div style="height:${items.length * slot}px"></div>` + (S.v === 'R4' ? '<span class="now"></span>' : '');
+}
+(() => { // scrubber pointer handling: month slots show a bubble and jump on release; year slots open a 12-month grid
+  const el = document.getElementById('scrub'), bub = document.getElementById('sbub'), pop = document.getElementById('ypop');
+  let drag = false, k = null, hide = null;
+  const yIn = e => Math.max(0, Math.min(G.items.length * G.slot - 1, e.clientY - el.getBoundingClientRect().top + el.scrollTop));
+  const hit = y => G.items[Math.min(G.items.length - 1, Math.floor(y / G.slot))];
+  const vis = y => el.offsetTop + y - el.scrollTop;
+  const showPop = (yr, y) => {
+    clearTimeout(hide);
+    el.querySelectorAll('.ys').forEach(s => s.classList.toggle('hot', +s.dataset.y === yr));
+    let h = `<b>${yr}</b><div class="gr">`;
+    for (let m = 0; m < 12; m++) { const mk2 = yr * 12 + m, ds = byMonth[mk2];
+      h += `<div class="mo ${ds ? '' : 'off'}" data-mk="${mk2}">${mname(mk2, { month: 'short' })}${ds ? `<i style="opacity:${ds.filter(written).length / ds.length}"></i>` : ''}</div>`; }
+    pop.innerHTML = h + '</div>'; pop.dataset.y = yr; pop.classList.add('on');
+    pop.style.top = Math.max(0, Math.min(vis(y) - 60, el.offsetTop + el.clientHeight - pop.offsetHeight)) + 'px';
+  };
+  const hidePop = () => { clearTimeout(hide); hide = setTimeout(() => { pop.classList.remove('on'); el.querySelectorAll('.ys.hot').forEach(s => s.classList.remove('hot')); }, 250); };
+  el.addEventListener('pointermove', e => {
+    if (!G) return;
+    const y = yIn(e), it = hit(y);
+    if (it.t === 'y') { bub.classList.remove('on'); if (pop.dataset.y != it.y || !pop.classList.contains('on')) showPop(it.y, y); else clearTimeout(hide); return; }
+    if (pop.classList.contains('on')) hidePop();
+    k = it.k; bub.textContent = mname(k); bub.style.top = vis(y) + 'px'; bub.classList.add('on');
+  });
+  el.addEventListener('pointerdown', e => { if (!G || hit(yIn(e)).t !== 'm') return; drag = true; el.setPointerCapture(e.pointerId); k = hit(yIn(e)).k; });
+  el.addEventListener('pointerup', () => { if (!drag) return; drag = false; bub.classList.remove('on'); jumpTo(k); });
+  el.addEventListener('pointerleave', () => { if (!drag) bub.classList.remove('on'); hidePop(); });
+  pop.addEventListener('pointerenter', () => clearTimeout(hide));
+  pop.addEventListener('pointerleave', hidePop);
+  pop.addEventListener('click', e => { const m = e.target.closest('.mo'); if (m) { pop.classList.remove('on'); jumpTo(+m.dataset.mk); } });
+})();
+
+function renderPicker() {
+  document.getElementById('picker')?.remove();
+  if (!S.picker || S.v !== 'R1') return;
+  const p = document.createElement('div'); p.id = 'picker';
+  let html = '';
+  for (let y = TODAY.getFullYear(); y >= SIGNUP.getFullYear(); y--) {
+    html += `<div class="yr">${y}</div><div class="gr">`;
+    for (let m = 0; m < 12; m++) {
+      const k = y * 12 + m, ds = byMonth[k];
+      html += `<div class="mo ${ds ? '' : 'off'} ${k === MONTHS[0] ? 'cur' : ''}" data-mk="${k}">${mname(k, { month: 'short' })}${ds ? `<i style="opacity:${ds.filter(written).length / ds.length}"></i>` : ''}</div>`;
+    }
+    html += '</div>';
+  }
+  p.innerHTML = html;
+  p.onclick = e => { const m = e.target.closest('.mo'); if (m) { S.picker = false; jumpTo(+m.dataset.mk); } };
+  document.getElementById('railwrap').appendChild(p);
+}
+
+function jumpTo(k) {
+  const need = byMonth[k].at(-1).i + 1, rail = document.getElementById('rail');
+  const go = () => {
+    const h = rail.querySelector(`.month[data-mk="${k}"]`);
+    if (h) rail.scrollTop = h.offsetTop - (S.v === 'R2' ? 8 : 0);
+  };
+  if (S.v !== 'R2') { // windowed: fetch from the target month, never the Days in between
+    const first = byMonth[k][0].i, last = byMonth[k].at(-1).i;
+    if (first >= S.from && last < S.loaded) { go(); return; }
+    loading = true;
+    setTimeout(() => { S.from = first; S.loaded = Math.max(last + 1, first + BATCH); loading = false; renderRail(); go(); markScrub(); updateBar(); }, 350); // pretend fetch
+    return;
+  }
+  if (need <= S.loaded) { renderRail(); go(); return; }
+  renderRail(); loading = true;
+  setTimeout(() => { S.loaded = Math.ceil(need / BATCH) * BATCH; loading = false; renderRail(); go(); updateBar(); }, 350); // pretend fetch
+}
+
+function renderPage() {
+  const day = days[S.sel], w = writable(day), text = day.pages[S.nb] || '';
+  const lines = (text ? text.split('\n') : ['']).map(l => `<div>${l ? esc(l) : '<br>'}</div>`).join('');
+  const badge = w ? (day.i === 1 ? '<span class="badge live">Still open until 02:00</span>' : '') : '<span class="badge">Read only</span>';
+  document.getElementById('main').innerHTML = `
+    <button id="hamb" title="Days"><svg width="16" height="16" viewBox="0 0 16 16" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M2.5 4h11M2.5 8h11M2.5 12h11"/></svg></button>
+    <div class="sheet ${w ? '' : 'ro'} ${S.nb === 'My Journal' ? '' : 'notitle'}">
+      <div class="head"><div class="dow">${fmt(day.date, { weekday: 'long' })}${day.i === 0 ? ' · Today' : ''}${badge}</div>
+        <div class="date">${fmt(day.date, { day: 'numeric', month: 'long', year: 'numeric' })}</div></div>
+      <div class="ed" ${w ? 'contenteditable="true" spellcheck="false"' : ''}>${lines}</div>
+      <div class="tabs">${NBS.map(n => `<div class="tab ${n === S.nb ? 'on' : ''}" data-nb="${n}">${n}</div>`).join('')}</div>
+    </div>`;
+  document.getElementById('hamb').onclick = () => { S.dopen = true; renderShell(); };
+  document.querySelectorAll('.tab[data-nb]').forEach(t => t.onclick = () => { S.nb = t.dataset.nb; renderPage(); });
+  const ed = document.querySelector('.ed[contenteditable]');
+  if (ed) ed.oninput = () => {
+    if (!ed.firstElementChild) ed.innerHTML = '<div><br></div>';
+    day.pages[S.nb] = ed.innerText.replace(/\n$/, '');
+    renderRail();
+  };
+}
+
+function select(i) { S.sel = i; S.dopen = false; renderShell(); renderRail(); renderPage(); }
+
+document.getElementById('rail').onclick = e => {
+  const slot = e.target.closest('.slot'), dot = e.target.closest('.dd'), mh = e.target.closest('.mh'), month = e.target.closest('.month');
+  if (slot) return select(+slot.dataset.i);
+  if (dot) { const d = days[+dot.dataset.i]; S.openMonths.add(d.k); S.monthLoaded.add(d.k); return select(d.i); }
+  if (mh) {
+    const k = +mh.parentElement.dataset.mk;
+    if (S.openMonths.has(k)) S.openMonths.delete(k); else {
+      S.openMonths.add(k);
+      if (!S.monthLoaded.has(k)) setTimeout(() => { S.monthLoaded.add(k); renderRail(); }, 350); // pretend fetch of one month
+    }
+    return renderRail();
+  }
+  if (month && S.v === 'R1') { S.picker = !S.picker; renderPicker(); }
+};
+document.getElementById('scrim').onclick = () => { S.dopen = false; renderShell(); };
+
+function renderNav() {
+  const ic = d => `<svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round">${d}</svg>`;
+  document.getElementById('navtop').innerHTML = `<div class="nav">
+      <a class="on">${ic('<path d="M2 7.5 8 2.5l6 5V14H10v-4H6v4H2z"/>')}Home</a>
+      <a>${ic('<circle cx="8" cy="8" r="5.5"/>')}Filler 1</a>
+      <a>${ic('<circle cx="8" cy="8" r="5.5"/>')}Filler 2</a>
+    </div>
+    <label class="search"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" style="flex:none"><circle cx="7" cy="7" r="5"/><path d="m11 11 4 4"/></svg><input placeholder="Search"></label>
+    <div class="navdiv"></div>`;
+}
+function renderShell() {
+  document.getElementById('frame').className = S.narrow ? 'narrow' : '';
+  document.getElementById('app').className = ['app', S.v, S.narrow ? 'narrow ' + S.drawer : '', S.dopen ? 'dopen' : ''].join(' ');
+  const [, curve, dur] = EASES[S.ease], r = document.documentElement.style;
+  r.setProperty('--hd', S.hd / 1000 + 's'); r.setProperty('--ease', curve); r.setProperty('--dur', dur);
+  updateBar();
+}
+function updateBar() {
+  document.getElementById('vn').textContent = `${S.v} · ${V[S.v]}`;
+  document.getElementById('grace').textContent = S.grace ? 'Grace: on (01:12)' : 'Grace: off';
+  document.getElementById('gm').textContent = `Marker: ${S.g}`;
+  document.getElementById('narrow').textContent = S.narrow ? 'Window: 760px' : 'Window: wide';
+  const dr = document.getElementById('drawer');
+  dr.textContent = S.drawer === 'D1' ? 'Drawer: D1 slide-over' : 'Drawer: D2 mini rail'; dr.disabled = !S.narrow;
+  document.getElementById('hd').textContent = `Hover delay: ${S.hd}ms`;
+  document.getElementById('ease').textContent = `Motion: ${EASES[S.ease][0]}`;
+  document.getElementById('hist').textContent = `History: ${S.years} years`;
+  const sm = document.getElementById('smode'); sm.textContent = 'Scrubber: ' + SM[S.sm]; sm.disabled = S.v !== 'R4';
+  document.getElementById('ld').textContent = S.v === 'R3' ? `${S.monthLoaded.size} / ${MONTHS.length} months loaded` : `Days ${S.from + 1}–${Math.min(S.loaded, days.length)} of ${days.length} loaded`;
+}
+function setVariant(v) {
+  S.v = v; S.loaded = BATCH; S.from = 0; S.picker = false; S.g = { R1: 'dot', R2: 'ring', R3: 'bar', R4: 'dot' }[v];
+  history.replaceState(null, '', '?variant=' + v);
+  renderShell(); renderRail();
+  const rail = document.getElementById('rail'); rail.scrollTop = v === 'R2' ? rail.scrollHeight : 0;
+}
+const cyc = n => setVariant(VK[(VK.indexOf(S.v) + n + VK.length) % VK.length]);
+document.getElementById('prev').onclick = () => cyc(-1);
+document.getElementById('next').onclick = () => cyc(1);
+document.getElementById('vn').onclick = () => cyc(1);
+document.getElementById('grace').onclick = () => { S.grace = !S.grace; renderShell(); renderRail(); renderPage(); };
+document.getElementById('gm').onclick = () => { S.g = { dot: 'ring', ring: 'bar', bar: 'dot' }[S.g]; updateBar(); renderRail(); };
+document.getElementById('labb').onclick = () => {
+  const lab = document.getElementById('lab'), on = lab.classList.toggle('on');
+  if (!on) return;
+  lab.innerHTML = `<h3>Compare motion</h3><p>Same Islands, one motion curve per column, all with the ${S.hd}ms hover delay (change it on the bar). Hover each one. Esc or the button closes this.</p><div class="cols">` +
+    LAB.map(([n, c, d, note]) => `<div class="col" style="--ease:${c};--dur:${d}"><h4>${n}</h4><small>${note} · ${d}</small>${[1, 2, 3, 6].map(i => island(days[i])).join('')}</div>`).join('') + '</div>';
+};
+document.getElementById('hist').onclick = () => {
+  S.years = { 3: 10, 10: 25, 25: 3 }[S.years]; gen(S.years);
+  S.sel = 0; S.openMonths = new Set([MONTHS[0]]); S.monthLoaded = new Set([MONTHS[0]]);
+  renderPage(); setVariant(S.v);
+};
+document.getElementById('smode').onclick = () => { S.sm = { S1: 'S2', S2: 'S3', S3: 'S4', S4: 'S1' }[S.sm]; document.getElementById('scrub').scrollTop = 0; renderScrub(); markScrub(); updateBar(); };
+document.getElementById('narrow').onclick = () => { S.narrow = !S.narrow; S.dopen = false; renderShell(); };
+document.getElementById('drawer').onclick = () => { S.drawer = S.drawer === 'D1' ? 'D2' : 'D1'; S.dopen = false; renderShell(); };
+document.getElementById('hd').onclick = () => { S.hd = { 0: 150, 150: 300, 300: 0 }[S.hd]; renderShell(); };
+document.getElementById('ease').onclick = () => { S.ease = (S.ease + 1) % EASES.length; renderShell(); };
+addEventListener('keydown', e => {
+  if (e.target.closest('input, textarea, [contenteditable]')) return;
+  if (e.key === 'ArrowLeft') cyc(-1);
+  if (e.key === 'ArrowRight') cyc(1);
+  if (e.key === 'Escape') { document.getElementById('lab').classList.remove('on'); S.picker = false; S.dopen = false; renderPicker(); renderShell(); }
+});
+renderNav(); renderPage(); setVariant(S.v);
+</script>
+</body>
+</html>
