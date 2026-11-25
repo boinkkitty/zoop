@@ -1,0 +1,3 @@
+# Pages are stored as TipTap JSON, not Markdown
+
+Each Page is stored as TipTap (ProseMirror) JSON in a JSONB column with a `schemaVersion`. The server keeps a plain-text copy for search, Island glimpses and the Title. Markdown is used only for export. We chose JSON for simplicity: the editor saves and loads its own document directly, with no conversion step that could silently change what was written. Markdown also can't express what v1 needs: it has no underline and no standard highlight. Rich-text editors like Apple Notes, Google Docs, Notion and Day One all store structured text with styles, not Markdown, and Day One, a journal app, moved away from storing Markdown (see `.scratch/journal-v1/research/page-storage-format.md`). Don't "fix" this back to Markdown storage.

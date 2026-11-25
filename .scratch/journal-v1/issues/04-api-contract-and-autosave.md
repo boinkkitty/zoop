@@ -14,3 +14,7 @@ What are the v1 HTTP endpoints, their request/response shapes, and how does auto
 - autosave debounce
 - conflicts when the same Page is open in two browser tabs or on two devices
 - how the server decides "today" and enforces the Grace Window lock for Free Users at 02:00
+
+## Context (2026-11-25)
+
+- **To consider, measure in production first:** gzip or brotli compression of HTTP responses (chi `middleware.Compress`, or at the host or proxy). It would help most when loading long Pages and months of rail data. Autosave uploads would stay uncompressed. Not decided for v1, so turn it on only if production numbers show a benefit.

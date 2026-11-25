@@ -23,7 +23,7 @@ The first 2 hours after midnight, during which the previous Day's Pages can stil
 _Avoid_: Late period, buffer
 
 **Title**:
-The first line of a Day's *My Journal* Page, shown bold on the Page and on that Day's Island.
+The first line of a Day's *My Journal* Page, shown bold on the Page and as plain text on that Day's Island. It is always a plain line, never a list item or quote.
 _Avoid_: Heading, subject
 
 **Island**:
