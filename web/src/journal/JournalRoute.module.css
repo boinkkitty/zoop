@@ -1,0 +1,41 @@
+.desk {
+  min-height: 100vh;
+  padding: 24px;
+}
+
+.bar {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 12px;
+  max-width: 860px;
+  margin: 0 auto 16px;
+  font-size: 14px;
+  color: var(--color-muted);
+}
+
+.bar button {
+  font: inherit;
+  padding: 6px 12px;
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-control);
+  background: var(--color-sheet);
+  color: var(--color-ink);
+  cursor: pointer;
+}
+
+.sheet {
+  max-width: 860px;
+  min-height: 60vh;
+  margin: 0 auto;
+  padding: 40px 48px;
+  background: var(--color-sheet);
+  border-radius: var(--radius-sheet);
+  box-shadow: var(--shadow-sheet);
+}
+
+.date {
+  margin: 0;
+  font-size: 19px;
+  font-weight: 600;
+}

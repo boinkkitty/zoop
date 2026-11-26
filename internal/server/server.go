@@ -12,6 +12,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/boinkkitty/zoop/internal/auth"
 	"github.com/boinkkitty/zoop/internal/clock"
 	"github.com/boinkkitty/zoop/internal/mail"
 )
@@ -26,15 +27,31 @@ type Deps struct {
 
 // New returns the app's root handler.
 func New(d Deps) http.Handler {
+	authn := auth.New(d.DB, d.Clock)
 	r := chi.NewRouter()
 	r.Route("/api", func(api chi.Router) {
 		api.Get("/healthz", healthz(d.DB))
+		api.Route("/v1", func(v1 chi.Router) {
+			v1.Post("/auth/signup", signup(authn))
+			v1.Post("/auth/login", login(authn))
+			v1.Post("/auth/logout", logout(authn))
+			v1.Group(func(signedIn chi.Router) {
+				signedIn.Use(requireUser(authn))
+				signedIn.Get("/me", getMe(authn))
+			})
+		})
 		api.NotFound(func(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusNotFound, "not_found", "No such endpoint.")
 		})
 	})
 	r.NotFound(appShell(d.Assets))
-	return r
+
+	// CSRF: browsers label cross-site requests, so state-changing ones from other sites are refused.
+	csrf := http.NewCrossOriginProtection()
+	csrf.SetDenyHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		writeError(w, http.StatusForbidden, "cross_origin", "Cross-origin requests aren't allowed.")
+	}))
+	return csrf.Handler(r)
 }
 
 // appShell serves a built file when the path names one, and otherwise
