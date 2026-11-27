@@ -31,6 +31,8 @@ export type SaverStatus = {
   conflict: Page | null;
   // The server is on a newer schema: saving stops until reload.
   outdated: boolean;
+  // The Day has closed: edits are no longer taken. What was written by then is still sent.
+  locked: boolean;
 };
 
 export type PageSaver = ReturnType<typeof createPageSaver>;
@@ -69,7 +71,12 @@ export function createPageSaver(o: SaverOptions) {
     base = kept.baseVersion;
   }
 
-  let status: SaverStatus = { notSaved: null, conflict: null, outdated: false };
+  let status: SaverStatus = {
+    notSaved: null,
+    conflict: null,
+    outdated: false,
+    locked: false,
+  };
   const listeners = new Set<(s: SaverStatus) => void>();
   function setStatus(next: Partial<SaverStatus>) {
     status = { ...status, ...next };
@@ -119,6 +126,8 @@ export function createPageSaver(o: SaverOptions) {
         ok = true;
       } else if (res.status === 409) {
         ok = refused(doc, await res.json());
+      } else if (res.status === 403) {
+        ok = closedByServer(doc, await res.json());
       }
     } catch {
       // A network failure: retried below like a server error.
@@ -186,8 +195,19 @@ export function createPageSaver(o: SaverOptions) {
     o.onReplace?.(theirs.doc);
   }
 
+  // The server refused a save because the Day closed (it arrived past the leeway): nothing more can be sent.
+  let closed = false;
+  function closedByServer(sent: Doc, body: { error?: { code?: string } }) {
+    if (body.error?.code !== "page_locked") return false;
+    pending ??= sent;
+    keep(); // the words stay on this device rather than vanish
+    closed = true;
+    setStatus({ locked: true });
+    return true;
+  }
+
   // Saving waits while the writer chooses a version, or until a reload after an update.
-  const blocked = () => status.conflict !== null || status.outdated;
+  const blocked = () => status.conflict !== null || status.outdated || closed;
 
   function scheduleRetry() {
     sendAfter = false;
@@ -197,6 +217,18 @@ export function createPageSaver(o: SaverOptions) {
     retryDelay = Math.min(retryDelay * 2, MAX_RETRY_MS);
   }
 
+  // At locksAt the editor goes read only: what's pending is sent at once, within the server's leeway.
+  function lock() {
+    void send();
+    setStatus({ locked: true });
+  }
+  const locksIn = o.page.locksAt
+    ? Date.parse(o.page.locksAt) - Date.now()
+    : Number.POSITIVE_INFINITY;
+  let lockTimer: Timer;
+  if (!o.page.editable || locksIn <= 0) status.locked = true;
+  else if (Number.isFinite(locksIn)) lockTimer = setTimeout(lock, locksIn);
+
   if (kept) void send();
 
   return {
@@ -205,6 +237,7 @@ export function createPageSaver(o: SaverOptions) {
     // edit records the editor's latest doc: it's saved after 1s idle, or within 5s while typing continues.
     // While a failed save waits to retry, the retry carries the latest doc instead.
     edit(doc: Doc) {
+      if (status.locked) return;
       pending = doc;
       keep();
       if (retry || blocked()) return;
@@ -256,6 +289,7 @@ export function createPageSaver(o: SaverOptions) {
     },
     // dispose saves what's pending as the editor goes away.
     dispose() {
+      clearTimeout(lockTimer);
       void send();
     },
   };

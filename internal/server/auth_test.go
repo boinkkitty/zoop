@@ -2,6 +2,7 @@ package server_test
 
 import (
 	"bytes"
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
@@ -33,7 +34,7 @@ type testApp struct {
 func startApp(t *testing.T, now time.Time) *testApp {
 	t.Helper()
 	c := clock.NewFake(now)
-	stub := googletest.Start(t, c.Now)
+	stub := googletest.Start(t, func() time.Time { return c.Now(t.Context()) })
 	// The app needs its own URL for Google's redirect, so it's built once the server is listening.
 	var h http.Handler
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { h.ServeHTTP(w, r) }))
@@ -73,7 +74,7 @@ func randomIP() string {
 }
 
 func (b *browser) keep(c *http.Cookie) {
-	expired := c.MaxAge < 0 || (!c.Expires.IsZero() && !c.Expires.After(b.app.clock.Now()))
+	expired := c.MaxAge < 0 || (!c.Expires.IsZero() && !c.Expires.After(b.app.clock.Now(context.Background())))
 	if expired {
 		delete(b.cookies, c.Name)
 		return
@@ -125,7 +126,7 @@ func (b *browser) do(method, path string, body any, headers ...string) response 
 		req.Header.Set(headers[i], headers[i+1])
 	}
 	for name, c := range b.cookies {
-		if !c.Expires.IsZero() && !c.Expires.After(b.app.clock.Now()) {
+		if !c.Expires.IsZero() && !c.Expires.After(b.app.clock.Now(context.Background())) {
 			delete(b.cookies, name)
 			continue
 		}

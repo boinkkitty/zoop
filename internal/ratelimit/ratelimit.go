@@ -56,7 +56,7 @@ func New(store Store, c clock.Clock) *RateLimiter {
 
 // Check returns an ExceededError if subject has already used up l in this window, without counting anything.
 func (r *RateLimiter) Check(ctx context.Context, l Limit, subject string) error {
-	now := r.clock.Now()
+	now := r.clock.Now(ctx)
 	start := now.Truncate(l.Window)
 	n, err := r.store.Count(ctx, key(l, subject), start)
 	if err != nil {
@@ -67,7 +67,7 @@ func (r *RateLimiter) Check(ctx context.Context, l Limit, subject string) error 
 
 // Take counts this attempt against l for subject, and returns an ExceededError if it's one too many.
 func (r *RateLimiter) Take(ctx context.Context, l Limit, subject string) error {
-	now := r.clock.Now()
+	now := r.clock.Now(ctx)
 	start := now.Truncate(l.Window)
 	n, err := r.store.Hit(ctx, key(l, subject), start, start.Add(l.Window))
 	if err != nil {
@@ -78,7 +78,7 @@ func (r *RateLimiter) Take(ctx context.Context, l Limit, subject string) error {
 
 // Record counts one attempt against l for subject.
 func (r *RateLimiter) Record(ctx context.Context, l Limit, subject string) error {
-	start := r.clock.Now().Truncate(l.Window)
+	start := r.clock.Now(ctx).Truncate(l.Window)
 	_, err := r.store.Hit(ctx, key(l, subject), start, start.Add(l.Window))
 	return err
 }

@@ -57,9 +57,10 @@ func run() error {
 	}
 	defer pool.Close()
 
+	c, shift := withTestClock(clock.System{})
 	deps := app.Deps{
 		DB:     pool,
-		Clock:  clock.System{},
+		Clock:  c,
 		Mailer: mail.Unconfigured{},
 		Assets: web.Dist(),
 		Google: googleCfg,
@@ -68,7 +69,7 @@ func run() error {
 
 	srv := &http.Server{
 		Addr:              ":" + port,
-		Handler:           app.New(deps),
+		Handler:           shift(app.New(deps)),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 

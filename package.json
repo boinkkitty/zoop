@@ -7,6 +7,7 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build && touch web/dist/.gitkeep",
     "build:bin": "pnpm build && go build -o bin/zoop ./cmd/zoop",
+    "build:e2e": "pnpm build && go build -tags testclock -o bin/zoop-e2e ./cmd/zoop",
     "lint": "biome check .",
     "test": "vitest run",
     "e2e": "playwright test"

@@ -38,7 +38,7 @@ type Swept struct {
 
 // Sweep deletes what has expired by the Clock: sessions and rate-limit rows.
 func Sweep(ctx context.Context, d Deps) (Swept, error) {
-	sessions, rateLimits, err := postgres.SweepExpired(ctx, d.DB, d.Clock.Now())
+	sessions, rateLimits, err := postgres.SweepExpired(ctx, d.DB, d.Clock.Now(ctx))
 	return Swept{Sessions: sessions, RateLimits: rateLimits}, err
 }
 

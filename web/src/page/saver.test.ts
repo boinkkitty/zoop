@@ -90,6 +90,7 @@ function saver(start = page(0), deps: Partial<SaverDeps> = {}) {
 
 beforeEach(() => {
   vi.useFakeTimers();
+  vi.setSystemTime(new Date("2026-11-26T09:00:00Z")); // the fixture Page locks at 17:00Z
   server = fakeServer();
   storage = memoryStorage();
 });
@@ -319,6 +320,7 @@ describe("save conflicts", () => {
       notSaved: null,
       conflict: null,
       outdated: false,
+      locked: false,
     });
     expect(saver(page(1)).restored).toBeNull();
 
@@ -372,6 +374,7 @@ describe("save conflicts", () => {
       notSaved: null,
       conflict: null,
       outdated: true,
+      locked: false,
     });
 
     s.edit(doc("Before the update, and after"));
@@ -433,5 +436,44 @@ describe("save conflicts", () => {
     s.edit(doc("Morning, from my phone. Then coffee."));
     await vi.advanceTimersByTimeAsync(1000);
     expect(server.sent.at(-1)?.body.baseVersion).toBe(2);
+  });
+});
+
+describe("the Day locking", () => {
+  it("at locksAt sends the last words at once, then reports the Page locked", async () => {
+    vi.setSystemTime(new Date("2026-11-26T16:59:59.500Z"));
+    const s = saver(page(0)); // locks at 17:00:00Z
+    s.edit(doc("the last words"));
+    await vi.advanceTimersByTimeAsync(499);
+    expect(server.sent).toHaveLength(0);
+    expect(s.status().locked).toBe(false);
+
+    await vi.advanceTimersByTimeAsync(1);
+    expect(server.sent.map((r) => r.body.doc)).toEqual([doc("the last words")]);
+    expect(s.status().locked).toBe(true);
+
+    s.edit(doc("too late"));
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(server.sent).toHaveLength(1);
+  });
+
+  it("opens locked when locksAt has already passed", () => {
+    vi.setSystemTime(new Date("2026-11-26T17:00:00Z"));
+    expect(saver(page(0)).status().locked).toBe(true);
+  });
+
+  it("when the server says the Day closed, stops saving but keeps the words on this device", async () => {
+    server.replies.push(async () =>
+      json(403, { error: { code: "page_locked", message: "Closed." } }),
+    );
+    const s = saver(page(0));
+    s.edit(doc("written after a long sleep"));
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(s.status().locked).toBe(true);
+    expect(s.status().notSaved).toBeNull();
+
+    await vi.advanceTimersByTimeAsync(120_000);
+    expect(server.sent).toHaveLength(1);
+    expect(saver(page(0)).restored).toEqual(doc("written after a long sleep"));
   });
 });

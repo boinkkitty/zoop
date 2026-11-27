@@ -81,7 +81,7 @@ func (s *Service) Signup(ctx context.Context, email, plain, timezone, clientIP s
 	if err != nil {
 		return Session{}, err
 	}
-	now := s.clock.Now()
+	now := s.clock.Now(ctx)
 	token, first, err := newSession(now)
 	if err != nil {
 		return Session{}, err
@@ -143,7 +143,7 @@ func (s *Service) login(ctx context.Context, email, plain string) (Session, erro
 
 // signIn starts a new session for an existing account.
 func (s *Service) signIn(ctx context.Context, userID uuid.UUID) (Session, error) {
-	token, sess, err := newSession(s.clock.Now())
+	token, sess, err := newSession(s.clock.Now(ctx))
 	if err != nil {
 		return Session{}, err
 	}
@@ -167,7 +167,7 @@ func (s *Service) Authenticate(ctx context.Context, token string) (Session, erro
 	if token == "" {
 		return Session{}, ErrNoSession
 	}
-	now := s.clock.Now()
+	now := s.clock.Now(ctx)
 	row, err := s.store.LiveSession(ctx, hashToken(token), now)
 	if errors.Is(err, ErrNotFound) {
 		return Session{}, ErrNoSession
@@ -220,7 +220,7 @@ func (s *Service) Account(ctx context.Context, userID uuid.UUID) (Account, error
 	if err != nil {
 		return Account{}, fmt.Errorf("stored timezone %q: %w", u.Timezone, err)
 	}
-	now := s.clock.Now()
+	now := s.clock.Now(ctx)
 	return Account{
 		Email:           u.Email,
 		EmailVerified:   u.EmailVerifiedAt != nil,

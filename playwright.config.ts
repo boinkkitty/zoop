@@ -2,10 +2,11 @@ import { defineConfig } from "@playwright/test";
 
 const port = 8091;
 
-// The smoke tests run against the real binary: frontend built, embedded, served by Go.
+// The smoke tests run against the real binary: frontend built, embedded, served by Go,
+// with the test-only clock override compiled in (-tags testclock) for the 02:00 lock test.
 // The database must already have the schema: apply internal/db/migrations by hand first.
 // Set ZOOP_E2E_BASE_URL to run them against an app that is already up instead
-// (CI points it at the Docker image it builds).
+// (CI points it at a Docker image it builds with GO_TAGS=testclock).
 const external = process.env.ZOOP_E2E_BASE_URL;
 
 export default defineConfig({
@@ -14,7 +15,7 @@ export default defineConfig({
   webServer: external
     ? undefined
     : {
-        command: "pnpm build:bin && ./bin/zoop",
+        command: "pnpm build:e2e && ./bin/zoop-e2e",
         url: `http://localhost:${port}/api/healthz`,
         timeout: 120_000,
         reuseExistingServer: false,
