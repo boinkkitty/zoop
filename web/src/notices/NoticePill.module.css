@@ -92,3 +92,8 @@
 .close:hover {
   background: #48484a;
 }
+
+.status {
+  padding: 0 8px;
+  color: rgb(245 245 247 / 70%);
+}

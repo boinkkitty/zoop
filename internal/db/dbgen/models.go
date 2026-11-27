@@ -20,6 +20,15 @@ type AuthIdentity struct {
 	CreatedAt    time.Time
 }
 
+type EmailToken struct {
+	ID        uuid.UUID
+	TokenHash []byte
+	UserID    uuid.UUID
+	Purpose   string
+	CreatedAt time.Time
+	ExpiresAt time.Time
+}
+
 type Notebook struct {
 	ID       int16
 	Slug     string

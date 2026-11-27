@@ -17,6 +17,7 @@ import (
 	"github.com/boinkkitty/zoop/internal/auth/password"
 	"github.com/boinkkitty/zoop/internal/clock"
 	"github.com/boinkkitty/zoop/internal/days"
+	mailer "github.com/boinkkitty/zoop/internal/mail"
 	"github.com/boinkkitty/zoop/internal/ratelimit"
 )
 
@@ -39,17 +40,32 @@ type ValidationError struct{ Message string }
 func (e *ValidationError) Error() string { return e.Message }
 
 // Service is the auth module. It persists through its Store, tells time by its Clock,
-// slows down guessing with its RateLimiter, and signs people in with Google through
-// its GoogleProvider (nil if not configured).
+// slows down guessing with its RateLimiter, signs people in with Google through
+// its GoogleProvider (nil if not configured), and emails links to appURL's pages through its Mailer.
 type Service struct {
 	store  Store
 	clock  clock.Clock
 	limits *ratelimit.RateLimiter
 	google GoogleProvider
+	mailer mailer.Mailer
+	appURL string
 }
 
-func New(store Store, c clock.Clock, limits *ratelimit.RateLimiter, google GoogleProvider) *Service {
-	return &Service{store: store, clock: c, limits: limits, google: google}
+// Deps is what a Service is built from.
+type Deps struct {
+	Store  Store
+	Clock  clock.Clock
+	Limits *ratelimit.RateLimiter
+	Google GoogleProvider // nil when Google sign-in isn't configured
+	Mailer mailer.Mailer
+	AppURL string // where emailed links point, e.g. https://zoop.example (no trailing slash)
+}
+
+func New(d Deps) *Service {
+	return &Service{
+		store: d.Store, clock: d.Clock, limits: d.Limits, google: d.Google,
+		mailer: d.Mailer, appURL: strings.TrimSuffix(d.AppURL, "/"),
+	}
 }
 
 // Session is a signed-in device.
@@ -60,8 +76,9 @@ type Session struct {
 	Renewed   bool // the expiry moved, so the cookie should be re-sent
 }
 
-// Signup creates a user with a password identity, their first Day being today in timezone, and signs them in.
-// Every attempt counts toward SignupsPerIP, so one address can't farm accounts.
+// Signup creates a user with a password identity, their first Day being today in timezone, signs them in,
+// and emails them a link to verify their email. Every attempt counts toward SignupsPerIP, so one address
+// can't farm accounts. If only the email fails, it returns the Session along with ErrMailNotSent.
 func (s *Service) Signup(ctx context.Context, rawEmail Email, plain Password, timezone, clientIP string) (Session, error) {
 	if err := s.limits.Take(ctx, ratelimit.SignupsPerIP, clientIP); err != nil {
 		return Session{}, err
@@ -92,7 +109,8 @@ func (s *Service) Signup(ctx context.Context, rawEmail Email, plain Password, ti
 	if err != nil {
 		return Session{}, err
 	}
-	return Session{Token: token, UserID: userID, ExpiresAt: first.ExpiresAt, Renewed: true}, nil
+	sess := Session{Token: token, UserID: userID, ExpiresAt: first.ExpiresAt, Renewed: true}
+	return sess, s.sendVerify(ctx, userID, string(email))
 }
 
 // Login signs a new device in with an email and password.

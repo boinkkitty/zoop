@@ -38,7 +38,7 @@ test("sign up, land in the app, sign out, sign in again", async ({ page }) => {
   await page.getByRole("button", { name: "Create account" }).click();
 
   await expect(page).toHaveURL(journal);
-  await expect(page.getByText(email)).toBeVisible();
+  await expect(page.getByText(email, { exact: true })).toBeVisible();
   expect(scripts.some((u) => appChunk.test(u))).toBe(true);
 
   await page.getByRole("button", { name: "Sign out" }).click();
@@ -54,7 +54,7 @@ test("sign up, land in the app, sign out, sign in again", async ({ page }) => {
   await page.getByLabel("Password").fill(password);
   await page.getByRole("button", { name: "Sign in" }).click();
   await expect(page).toHaveURL(journal);
-  await expect(page.getByText(email)).toBeVisible();
+  await expect(page.getByText(email, { exact: true })).toBeVisible();
 });
 
 test("sign-in and signup offer Google, carrying the browser's timezone", async ({

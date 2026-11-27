@@ -31,6 +31,10 @@ func signup(a *auth.Service, rep *reporter) http.HandlerFunc {
 			return
 		}
 		sess, err := a.Signup(r.Context(), c.Email, c.Password, c.Timezone, clientIP(r))
+		if errors.Is(err, auth.ErrMailNotSent) {
+			rep.report(r, err) // signed up all the same: they can ask for the email again
+			err = nil
+		}
 		if err != nil {
 			writeAuthError(w, r, rep, err)
 			return
@@ -71,6 +75,91 @@ func logout(a *auth.Service, rep *reporter) http.HandlerFunc {
 		})
 		w.WriteHeader(http.StatusNoContent)
 	}
+}
+
+type tokenBody struct {
+	Token auth.Token `json:"token"`
+}
+
+// verifyEmail is POSTed by the /verify page, so a link-scanner's GET of the emailed link can't use the token up.
+func verifyEmail(a *auth.Service, rep *reporter) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var body tokenBody
+		if !decode(w, r, &body) {
+			return
+		}
+		if err := a.VerifyEmail(r.Context(), body.Token); err != nil {
+			writeAuthError(w, r, rep, err)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}
+}
+
+type emailBody struct {
+	Email auth.Email `json:"email"`
+}
+
+// resendVerify answers 202 whether or not the email has an account.
+func resendVerify(a *auth.Service, rep *reporter) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var body emailBody
+		if !decode(w, r, &body) {
+			return
+		}
+		if !emailRequested(w, r, rep, a.ResendVerify(r.Context(), body.Email, clientIP(r))) {
+			return
+		}
+		w.WriteHeader(http.StatusAccepted)
+	}
+}
+
+// forgotPassword answers 202 whether or not the email has an account.
+func forgotPassword(a *auth.Service, rep *reporter) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var body emailBody
+		if !decode(w, r, &body) {
+			return
+		}
+		if !emailRequested(w, r, rep, a.ForgotPassword(r.Context(), body.Email, clientIP(r))) {
+			return
+		}
+		w.WriteHeader(http.StatusAccepted)
+	}
+}
+
+type resetBody struct {
+	Token    auth.Token    `json:"token"`
+	Password auth.Password `json:"password"`
+}
+
+// resetPassword is POSTed by the /reset page. Every device is signed out, this one included.
+func resetPassword(a *auth.Service, rep *reporter) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var body resetBody
+		if !decode(w, r, &body) {
+			return
+		}
+		if err := a.ResetPassword(r.Context(), body.Token, body.Password); err != nil {
+			writeAuthError(w, r, rep, err)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}
+}
+
+// emailRequested reports whether a request for an email went through, answering for it if not.
+// A send that failed is reported but not shown, so failures don't reveal which emails have accounts.
+func emailRequested(w http.ResponseWriter, r *http.Request, rep *reporter, err error) bool {
+	if errors.Is(err, auth.ErrMailNotSent) {
+		rep.report(r, err)
+		return true
+	}
+	if err != nil {
+		writeAuthError(w, r, rep, err)
+		return false
+	}
+	return true
 }
 
 type userKey struct{}
@@ -197,6 +286,8 @@ func writeAuthError(w http.ResponseWriter, r *http.Request, rep *reporter, err e
 		writeError(w, http.StatusConflict, "email_taken", "That email already has an account. Sign in instead.")
 	case errors.Is(err, auth.ErrBadLogin):
 		writeError(w, http.StatusUnauthorized, "unauthenticated", "Wrong email or password.")
+	case errors.Is(err, auth.ErrBadToken):
+		writeError(w, http.StatusBadRequest, "bad_token", "This link has expired or was already used.")
 	case errors.Is(err, auth.ErrNoSession):
 		writeError(w, http.StatusUnauthorized, "unauthenticated", "Please sign in.")
 	default:

@@ -84,7 +84,7 @@ test("yesterday's Page turns read only at 02:00 without losing the last words", 
 
   // Dismissed, it stays dismissed for that Day.
   await page.goBack();
-  await page.getByRole("button", { name: "Dismiss" }).click();
+  await closed.locator("..").getByRole("button", { name: "Dismiss" }).click();
   await expect(closed).toBeHidden();
   await page.reload();
   await expect(editor.locator("p").first()).toHaveText("Last words before two");
