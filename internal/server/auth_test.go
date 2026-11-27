@@ -2,6 +2,7 @@ package server_test
 
 import (
 	"bytes"
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
@@ -50,7 +51,7 @@ func (a *testApp) browser() *browser {
 }
 
 func (b *browser) keep(c *http.Cookie) {
-	expired := c.MaxAge < 0 || (!c.Expires.IsZero() && !c.Expires.After(b.app.clock.Now()))
+	expired := c.MaxAge < 0 || (!c.Expires.IsZero() && !c.Expires.After(b.app.clock.Now(context.Background())))
 	if expired {
 		delete(b.cookies, c.Name)
 		return
@@ -101,7 +102,7 @@ func (b *browser) do(method, path string, body any, headers ...string) response 
 		req.Header.Set(headers[i], headers[i+1])
 	}
 	for name, c := range b.cookies {
-		if !c.Expires.IsZero() && !c.Expires.After(b.app.clock.Now()) {
+		if !c.Expires.IsZero() && !c.Expires.After(b.app.clock.Now(context.Background())) {
 			delete(b.cookies, name)
 			continue
 		}

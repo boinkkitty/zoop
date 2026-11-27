@@ -75,8 +75,9 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm exec playwright install --with-deps chromium
+      # The production image, plus the test-only clock override the 02:00 lock test drives.
       - name: Build the image
-        run: docker build -t zoop:ci .
+        run: docker build --build-arg GO_TAGS=testclock -t zoop:ci .
       # The auth tests need the schema. Apply it to this throwaway database with
       # psql, file by file, exactly as it's done by hand. The app never migrates.
       - name: Apply the schema by hand

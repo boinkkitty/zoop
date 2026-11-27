@@ -6,6 +6,8 @@ export type Notice = {
   id: NoticeId;
   text: string;
   actions: { label: string; onClick: () => void }[];
+  // Called when a dismissible Notice is closed, to remember it beyond this pill.
+  onDismiss?: () => void;
 };
 
 // The notice pill: one black pill centred over the sheet's top edge. It shows the
@@ -36,7 +38,10 @@ export function NoticePill({ notices }: { notices: Notice[] }) {
               type="button"
               className={styles.close}
               aria-label="Dismiss"
-              onClick={() => dismiss(n.id)}
+              onClick={() => {
+                dismiss(n.id);
+                n.onDismiss?.();
+              }}
             >
               ×
             </button>

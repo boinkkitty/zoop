@@ -17,7 +17,9 @@ COPY cmd ./cmd
 COPY internal ./internal
 COPY web ./web
 COPY --from=web /src/web/dist ./web/dist
-RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /zoop ./cmd/zoop
+# Empty for production. CI's e2e image passes GO_TAGS=testclock to compile in the test clock.
+ARG GO_TAGS=
+RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -tags "$GO_TAGS" -o /zoop ./cmd/zoop
 
 FROM gcr.io/distroless/static-debian12:nonroot
 COPY --from=bin /zoop /zoop
