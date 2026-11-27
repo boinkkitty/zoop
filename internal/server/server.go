@@ -58,6 +58,8 @@ func New(d Deps) http.Handler {
 				signedIn.Patch("/me", patchMe(authn, rep))
 				signedIn.Get("/pages/{day}/{notebook}", getPage(d.Pages, rep))
 				signedIn.Put("/pages/{day}/{notebook}", putPage(d.Pages, rep))
+				signedIn.Get("/days", getMonth(d.Pages, rep))
+				signedIn.Get("/days/summary", getSummary(d.Pages, rep))
 			})
 		})
 		api.NotFound(func(w http.ResponseWriter, r *http.Request) {

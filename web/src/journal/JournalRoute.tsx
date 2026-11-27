@@ -10,6 +10,7 @@ import type { Notice } from "../notices/NoticePill";
 import { keepTimezone, timezoneNotice } from "../notices/timezone";
 import { PageEditor } from "../page/PageEditor";
 import { pageQuery } from "../page/queries";
+import { Sidebar } from "../rail/Sidebar";
 import { meQuery } from "../router";
 import { ShortcutSheet } from "../shortcuts/ShortcutSheet";
 import styles from "./JournalRoute.module.css";
@@ -36,30 +37,33 @@ function JournalRoute() {
   });
 
   return (
-    <main className={styles.desk}>
-      <header className={styles.bar}>
-        <span>{me.email}</span>
-        <button
-          type="button"
-          onClick={() => signOut.mutate()}
-          disabled={signOut.isPending}
-        >
-          Sign out
-        </button>
-      </header>
-      <article className={styles.sheet}>
-        <PageEditor
-          key={`${page.day}/${page.notebook}`}
-          page={page}
-          owner={me.email}
-          today={me.today}
-          timezone={me.timezone}
-          accountNotices={timezone ? [timezone] : []}
-        />
-        <NotebookIndex day={page.day} active={page.notebook} />
-      </article>
-      <ShortcutSheet />
-    </main>
+    <div className={styles.app}>
+      <Sidebar me={me} day={day} notebook={notebook} />
+      <main className={styles.desk}>
+        <header className={styles.bar}>
+          <span>{me.email}</span>
+          <button
+            type="button"
+            onClick={() => signOut.mutate()}
+            disabled={signOut.isPending}
+          >
+            Sign out
+          </button>
+        </header>
+        <article className={styles.sheet}>
+          <PageEditor
+            key={`${page.day}/${page.notebook}`}
+            page={page}
+            owner={me.email}
+            today={me.today}
+            timezone={me.timezone}
+            accountNotices={timezone ? [timezone] : []}
+          />
+          <NotebookIndex day={page.day} active={page.notebook} />
+        </article>
+        <ShortcutSheet />
+      </main>
+    </div>
   );
 }
 

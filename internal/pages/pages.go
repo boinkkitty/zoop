@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 	"unicode/utf8"
 
@@ -121,6 +122,9 @@ func (s *Service) Save(ctx context.Context, userID uuid.UUID, day time.Time, not
 	}
 	if utf8.RuneCountInString(plain) > MaxChars {
 		return Page{}, ErrTooLong
+	}
+	if strings.TrimSpace(plain) == "" {
+		plain = "" // an emptied Page: only blank lines don't make a Written Day
 	}
 	stored, err := s.store.SavePage(ctx, userID, notebook, day, in.BaseVersion, NewPage{
 		Doc: in.Doc, SchemaVersion: in.SchemaVersion, PlainText: plain, Now: w.now,

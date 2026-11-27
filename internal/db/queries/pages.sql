@@ -24,3 +24,19 @@ FROM notebooks n
 WHERE n.id = p.notebook_id AND n.slug = @notebook
   AND p.user_id = @user_id AND p.day = @day AND p.version = @base_version
 RETURNING p.doc, p.schema_version, p.version, p.updated_at;
+
+-- name: ListPageTexts :many
+-- The start of each written Page in from_day..to_day: enough for Titles and glimpses.
+SELECT p.day, n.slug AS notebook, left(p.plain_text, 400)::text AS head
+FROM pages p
+JOIN notebooks n ON n.id = p.notebook_id
+WHERE p.user_id = @user_id AND p.day BETWEEN @from_day AND @to_day AND p.plain_text <> ''
+ORDER BY p.day DESC;
+
+-- name: CountWrittenDaysByMonth :many
+-- Written Days per month over the whole history, from the pages_written partial index.
+SELECT date_trunc('month', p.day)::date AS month, count(DISTINCT p.day)::int AS written_days
+FROM pages p
+WHERE p.user_id = @user_id AND p.plain_text <> ''
+GROUP BY 1
+ORDER BY 1 DESC;

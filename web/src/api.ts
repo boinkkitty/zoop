@@ -79,6 +79,34 @@ export const pagePath = (day: string, notebook: string) =>
 export const getPage = (day: string, notebook: string) =>
   request<Page>("GET", pagePath(day, notebook));
 
+// One Day in the rail. Titles and glimpses are derived by the server from the Pages.
+export type Island = {
+  day: string;
+  written: boolean;
+  title: string;
+  glimpses: Record<string, string>;
+};
+
+// A month of Islands, newest first, with the neighbouring months to page to (null at either end).
+export type RailMonth = {
+  month: string;
+  days: Island[];
+  newerMonth: string | null;
+  olderMonth: string | null;
+};
+
+export const getMonth = (month: string) =>
+  request<RailMonth>("GET", `/days?month=${encodeURIComponent(month)}`);
+
+export type DaysSummary = {
+  firstDay: string;
+  today: string;
+  months: { month: string; writtenDays: number }[];
+};
+
+export const getDaysSummary = () =>
+  request<DaysSummary>("GET", "/days/summary");
+
 export const signup = (email: string, password: string) =>
   request<void>("POST", "/auth/signup", {
     email,

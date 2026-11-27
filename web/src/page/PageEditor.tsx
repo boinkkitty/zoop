@@ -6,6 +6,7 @@ import { EditorContent, useEditor } from "@tiptap/react";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import type { Page } from "../api";
 import { type Notice, NoticePill } from "../notices/NoticePill";
+import { railKey } from "../rail/queries";
 import { DayHead } from "./DayHead";
 import { editorOptions } from "./formatting";
 import type { Notebook } from "./notebooks";
@@ -45,11 +46,14 @@ export function PageEditor({
       owner,
       fetch: (...args) => fetch(...args),
       storage: localStorage,
-      onSaved: (saved) =>
+      onSaved: (saved) => {
         queryClient.setQueryData(
           pageQuery(saved.day, saved.notebook).queryKey,
           saved,
-        ),
+        );
+        // The Day's Island shows its Title and glimpses, and the scrubber its Written Days.
+        void queryClient.invalidateQueries({ queryKey: railKey });
+      },
       onReplace: (doc) =>
         editorRef.current?.commands.setContent(doc, { emitUpdate: false }),
     }),
