@@ -172,7 +172,7 @@ export function Sidebar({
         </label>
       </nav>
       <div className={styles.divider} />
-      <div className={styles.railWrap}>
+      <div className={styles.railWrap} data-coach="rail">
         {searching ? (
           <SearchResults
             q={found.settled}
@@ -242,6 +242,9 @@ function Rail({
   onMonthInView: (month: string) => void;
 }) {
   const q = useInfiniteQuery(railQuery(anchor));
+  // Until the first Written Day, the rail's end explains what Islands are.
+  const { data: summary } = useQuery(summaryQuery);
+  const noWrittenDay = summary?.months.every((m) => m.writtenDays === 0);
   const top = useRef<HTMLDivElement>(null);
   const bottom = useRef<HTMLDivElement>(null);
   // Newer months load above what's on screen: keep it from jumping down.
@@ -348,15 +351,28 @@ function Rail({
         {q.isPending || q.hasNextPage ? (
           <Shimmer />
         ) : (
-          <p className={styles.railEnd}>
-            You started here ·{" "}
-            {new Date(`${me.firstDay}T00:00:00Z`).toLocaleDateString("en-GB", {
-              day: "numeric",
-              month: "long",
-              year: "numeric",
-              timeZone: "UTC",
-            })}
-          </p>
+          <>
+            <p className={styles.railEnd}>
+              You started here ·{" "}
+              {me.firstDay === me.today
+                ? "today"
+                : new Date(`${me.firstDay}T00:00:00Z`).toLocaleDateString(
+                    "en-GB",
+                    {
+                      day: "numeric",
+                      month: "long",
+                      year: "numeric",
+                      timeZone: "UTC",
+                    },
+                  )}
+            </p>
+            {noWrittenDay && (
+              <p className={styles.railHint}>
+                Every Day gets an Island here. Its Title is the first line you
+                write.
+              </p>
+            )}
+          </>
         )}
       </div>
     </nav>

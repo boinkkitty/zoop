@@ -36,6 +36,7 @@ export function PageEditor({
   accountNotices = [],
   searchQuery = null,
   onClearSearch = () => {},
+  onEdit = () => {},
 }: {
   page: Page;
   owner: string;
@@ -45,11 +46,14 @@ export function PageEditor({
   accountNotices?: Notice[]; // about the account rather than this Page
   searchQuery?: string | null; // the search this Page was opened from: its matches are marked
   onClearSearch?: () => void;
+  onEdit?: () => void; // the user typed (first run ends its coach marks)
 }) {
   const queryClient = useQueryClient();
   const editorRef = useRef<Editor | null>(null);
   const onClearSearchRef = useRef(onClearSearch);
   onClearSearchRef.current = onClearSearch;
+  const onEditRef = useRef(onEdit);
+  onEditRef.current = onEdit;
   const [saver] = useState(() =>
     createPageSaver({
       day: page.day,
@@ -106,6 +110,7 @@ export function PageEditor({
     onUpdate: ({ editor }) => {
       saver.edit(editor.getJSON() as Doc);
       onClearSearchRef.current(); // typing clears the matches
+      onEditRef.current();
     },
     onBlur: () => saver.flush(),
   });
@@ -143,7 +148,11 @@ export function PageEditor({
         readOnly={status.locked}
         searchWords={matchWords}
       />
-      <EditorContent editor={editor} className={styles.editor} />
+      <EditorContent
+        editor={editor}
+        className={styles.editor}
+        data-coach="page"
+      />
     </>
   );
 }

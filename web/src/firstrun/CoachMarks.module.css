@@ -1,0 +1,99 @@
+/* A coach mark: a dark callout in the notice pill's style, with an arrow at its target. */
+.mark {
+  position: fixed;
+  z-index: 40;
+  width: 250px;
+  padding: 12px 14px 10px;
+  border-radius: 14px;
+  background: #1d1d1f;
+  color: #f5f5f7;
+  font-size: 12.5px;
+  line-height: 1.45;
+  box-shadow: 0 12px 34px rgb(0 0 0 / 25%);
+  animation: drop 0.25s var(--ease-spring);
+}
+
+.mark::before {
+  content: "";
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  border-radius: 2px;
+  background: #1d1d1f;
+  transform: rotate(45deg);
+}
+
+.top::before {
+  left: 26px;
+  top: -5px;
+}
+
+.left::before {
+  left: -5px;
+  top: 18px;
+}
+
+.right::before {
+  right: -5px;
+  top: 18px;
+}
+
+.title {
+  display: block;
+  margin-bottom: 3px;
+  font-size: 13px;
+}
+
+.mark kbd {
+  padding: 0 4px;
+  border: 1px solid #48484a;
+  border-radius: 4px;
+  color: #d2d2d7;
+  font: inherit;
+}
+
+.foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 9px;
+  font-size: 11px;
+  color: #8e8e93;
+}
+
+.foot button {
+  border: 0;
+  border-radius: 999px;
+  padding: 4px 11px;
+  font: 600 11.5px system-ui;
+  cursor: pointer;
+}
+
+.next {
+  background: #f5f5f7;
+  color: #000;
+}
+
+.skip {
+  background: none;
+  color: #8e8e93;
+  font-weight: 500;
+}
+
+.foot button:focus-visible {
+  outline: 2px solid #f5f5f7;
+  outline-offset: 1px;
+}
+
+@keyframes drop {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mark {
+    animation: none;
+  }
+}

@@ -6,6 +6,7 @@ import {
 import { createLazyRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { type Me, setTimezone } from "../api";
+import { CoachMarks, useCoachMarks } from "../firstrun/CoachMarks";
 import type { Notice } from "../notices/NoticePill";
 import { keepTimezone, timezoneNotice } from "../notices/timezone";
 import { PageEditor } from "../page/PageEditor";
@@ -38,6 +39,7 @@ function JournalRoute() {
     opened && opened.day === day && opened.notebook === notebook
       ? opened.q
       : null;
+  const coach = useCoachMarks();
   const [dialog, setDialog] = useDialog();
   const openIf = (name: Dialog) => (open: boolean) =>
     setDialog(open ? name : null);
@@ -72,9 +74,11 @@ function JournalRoute() {
             accountNotices={timezone ? [timezone] : []}
             searchQuery={searchQuery}
             onClearSearch={() => setOpened(null)}
+            onEdit={coach.step === null ? undefined : coach.end}
           />
           <NotebookIndex day={page.day} active={page.notebook} />
         </article>
+        <CoachMarks step={coach.step} onNext={coach.next} onSkip={coach.end} />
         <SettingsDialog
           me={me}
           open={dialog === "settings"}
