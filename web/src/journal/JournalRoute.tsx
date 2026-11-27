@@ -10,6 +10,7 @@ import { pageQuery } from "../page/queries";
 import { meQuery } from "../router";
 import { ShortcutSheet } from "../shortcuts/ShortcutSheet";
 import styles from "./JournalRoute.module.css";
+import { NotebookIndex } from "./NotebookIndex";
 
 export const Route = createLazyRoute("/day/$day/$notebook")({
   component: JournalRoute,
@@ -50,6 +51,7 @@ function JournalRoute() {
           today={me.today}
           timezone={me.timezone}
         />
+        <NotebookIndex day={page.day} active={page.notebook} />
       </article>
       <ShortcutSheet />
     </main>

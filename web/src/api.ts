@@ -1,4 +1,5 @@
 import type { JSONContent } from "@tiptap/core";
+import type { Notebook } from "./page/notebooks";
 
 // The JSON API client. Errors arrive as {error: {code, message}}.
 
@@ -58,7 +59,7 @@ export type Doc = { type: "doc"; content?: JSONContent[] };
 
 export type Page = {
   day: string;
-  notebook: string;
+  notebook: Notebook;
   doc: Doc;
   schemaVersion: number;
   version: number;
@@ -102,3 +103,6 @@ export const logout = () => request<void>("POST", "/auth/logout");
 
 export const isUnauthenticated = (err: unknown) =>
   err instanceof ApiError && err.code === "unauthenticated";
+
+export const isNotFound = (err: unknown) =>
+  err instanceof ApiError && err.code === "not_found";

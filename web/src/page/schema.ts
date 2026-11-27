@@ -22,8 +22,9 @@ import {
 import Paragraph from "@tiptap/extension-paragraph";
 import Text from "@tiptap/extension-text";
 import Underline from "@tiptap/extension-underline";
-import type { Node as PMNode } from "@tiptap/pm/model";
+import type { Node as PMNode, Schema } from "@tiptap/pm/model";
 import type { Doc } from "../api";
+import { isNotebook, NOTEBOOKS, type Notebook } from "./notebooks";
 
 // Bump together with pages.SchemaVersion and testdata/page-docs/schema-version.json.
 // 2: formatting (marks, lists, checklists, quotes).
@@ -36,9 +37,13 @@ export type { Doc } from "../api";
 
 export const EMPTY_DOC: Doc = { type: "doc", content: [{ type: "paragraph" }] };
 
-// My Journal's grammar: the Title paragraph, then any blocks. The Title's bold is CSS,
-// and because it must be a paragraph it can never become a list or a quote.
-const PageDocument = Document.extend({ content: "paragraph block*" });
+// Each Notebook's grammar, as on the server (docRules in internal/pages/schema.go).
+// My Journal starts with the Title, a plain paragraph whose bold is CSS, so it can
+// never become a list or a quote. I Learned has no Title.
+const grammars: Record<Notebook, string> = {
+  "my-journal": "paragraph block*",
+  "i-learned": "block+",
+};
 
 // Numbered lists always count from 1: no start or type attrs, and no plugin that
 // turns pasted "1. …" text into a list (pasted text stays literal).
@@ -82,10 +87,9 @@ const PageTaskItem = TaskItem.extend({
   }),
 }).configure({ nested: true });
 
-// The document extensions: the v1 node and mark set (with their own Enter, Backspace and
-// mark shortcuts). Zoop's other shortcuts and paste rules are added by formatting.ts.
-export const documentExtensions: AnyExtension[] = [
-  PageDocument,
+// The nodes and marks both Notebooks share: the v1 set (with their own Enter, Backspace
+// and mark shortcuts). Zoop's other shortcuts and paste rules are added by formatting.ts.
+const contentExtensions: AnyExtension[] = [
   Paragraph,
   Text,
   Bold,
@@ -100,7 +104,16 @@ export const documentExtensions: AnyExtension[] = [
   PageBlockquote,
 ];
 
-export const pageSchema = getSchema(documentExtensions);
+// documentExtensions are one Notebook's document extensions only: editor behaviour
+// (placeholders, history, formatting.ts) is added by the editor.
+export const documentExtensions = (notebook: Notebook): AnyExtension[] => [
+  Document.extend({ content: grammars[notebook] }),
+  ...contentExtensions,
+];
+
+const schemas = Object.fromEntries(
+  NOTEBOOKS.map(({ slug }) => [slug, getSchema(documentExtensions(slug))]),
+) as Record<Notebook, Schema>;
 
 // listDepth is how deeply lists nest inside node: 0 for none, 1 for a list with no list inside.
 export function listDepth(node: PMNode): number {
@@ -113,9 +126,11 @@ export function listDepth(node: PMNode): number {
 
 export const isList = (node: PMNode) => node.type.isInGroup("list");
 
-// parseDoc returns the ProseMirror node for json if it's a valid Page, or null.
+// parseDoc returns the ProseMirror node for json if it's a valid Page in notebook, or null.
 // It also refuses anything ProseMirror would silently drop, so what's sent is what's stored.
-export function parseDoc(json: unknown): PMNode | null {
+export function parseDoc(notebook: string, json: unknown): PMNode | null {
+  if (!isNotebook(notebook)) return null;
+  const pageSchema = schemas[notebook];
   try {
     const node = pageSchema.nodeFromJSON(json);
     if (node.type !== pageSchema.topNodeType) return null;

@@ -10,7 +10,10 @@ function open(content: JSONContent) {
   editor = new Editor({
     ...editorOptions,
     element: document.body.appendChild(document.createElement("div")),
-    extensions: [...documentExtensions, ...editorOptions.extensions],
+    extensions: [
+      ...documentExtensions("my-journal"),
+      ...editorOptions.extensions,
+    ],
     content,
   });
   return editor;
@@ -269,7 +272,7 @@ describe("paste", () => {
         ),
       ),
     );
-    expect(parseDoc(json())).not.toBeNull();
+    expect(parseDoc("my-journal", json())).not.toBeNull();
   });
 
   it("turns headings and other blocks into paragraphs", () => {
@@ -277,7 +280,7 @@ describe("paste", () => {
     atEmpty();
     paste("<h1>Big</h1><pre>code</pre><p>after</p>");
     const got = json();
-    expect(parseDoc(got)).not.toBeNull();
+    expect(parseDoc("my-journal", got)).not.toBeNull();
     expect(
       editor.state.doc.textBetween(0, editor.state.doc.content.size, "\n"),
     ).toBe("Title\nBig\ncode\nafter");
@@ -300,7 +303,7 @@ describe("paste", () => {
         ),
       ),
     );
-    expect(parseDoc(json())).not.toBeNull();
+    expect(parseDoc("my-journal", json())).not.toBeNull();
   });
 
   it("drops an ordered list's start number", () => {

@@ -38,7 +38,12 @@ type node struct {
 // one line per block wherever it sits (in a list, a checklist or a quote).
 //
 // In My Journal the first paragraph is the Title; its bold is CSS, never a stored mark.
+// I Learned has no Title.
 func ParseDoc(notebook string, doc json.RawMessage) (string, error) {
+	rule, ok := docRules[notebook]
+	if !ok {
+		return "", invalid("there's no Notebook %q", notebook)
+	}
 	dec := json.NewDecoder(bytes.NewReader(doc))
 	dec.DisallowUnknownFields()
 	var root node
@@ -49,9 +54,12 @@ func ParseDoc(notebook string, doc json.RawMessage) (string, error) {
 		return "", invalid("the root must be a plain doc node")
 	}
 	if root.Content == nil || len(*root.Content) == 0 {
-		return "", invalid("a Page starts with its Title paragraph")
+		if rule.first != "" {
+			return "", invalid("a Page starts with its Title paragraph")
+		}
+		return "", invalid("a Page has at least one block")
 	}
-	if err := docRule(notebook).check(*root.Content); err != nil {
+	if err := rule.check(*root.Content); err != nil {
 		return "", invalid("doc: %v", err)
 	}
 	var lines []string

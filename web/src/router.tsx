@@ -6,8 +6,9 @@ import {
   Outlet,
   redirect,
 } from "@tanstack/react-router";
-import { getMe, isUnauthenticated } from "./api";
+import { getMe, isNotFound, isUnauthenticated } from "./api";
 import { AuthScreen } from "./auth/AuthScreen";
+import { isNotebook } from "./page/notebooks";
 import { pageQuery } from "./page/queries";
 
 export const queryClient = new QueryClient({
@@ -60,12 +61,25 @@ const signupRoute = createRoute({
 });
 
 // Lazy, so the auth screens never download the signed-in app (or, later, the editor).
+// A Page that isn't there (an unknown Notebook, a Day outside the journal) goes home, like unknown paths.
 const dayRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/day/$day/$notebook",
-  beforeLoad: ({ context }) => requireMe(context.queryClient),
-  loader: ({ context, params }) =>
-    context.queryClient.ensureQueryData(pageQuery(params.day, params.notebook)),
+  beforeLoad: async ({ context, params }) => {
+    const me = await requireMe(context.queryClient);
+    if (!isNotebook(params.notebook)) throw redirect({ to: "/" });
+    return me;
+  },
+  loader: async ({ context, params }) => {
+    try {
+      return await context.queryClient.ensureQueryData(
+        pageQuery(params.day, params.notebook),
+      );
+    } catch (err) {
+      if (isNotFound(err)) throw redirect({ to: "/" });
+      throw err;
+    }
+  },
 }).lazy(() => import("./journal/JournalRoute").then((m) => m.Route));
 
 // Unknown paths go home, which sends the visitor to sign in or to today.

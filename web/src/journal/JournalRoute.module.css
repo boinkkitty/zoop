@@ -37,7 +37,8 @@
 }
 
 @media (max-width: 720px) {
+  /* Room on the right for the 52px Notebook index. */
   .sheet {
-    padding: 40px 28px 56px;
+    padding: 40px 80px 56px 28px;
   }
 }

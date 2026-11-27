@@ -30,7 +30,7 @@ type contentRule struct {
 }
 
 // containers are the nodes that hold blocks. The paragraph (text only) and the
-// doc (per Notebook, see docRule) are handled apart.
+// doc (per Notebook, see docRules) are handled apart.
 var containers = map[string]contentRule{
 	"blockquote":  {each: blocks, nonEmpty: true},
 	"bulletList":  {each: set("listItem"), nonEmpty: true},
@@ -40,10 +40,13 @@ var containers = map[string]contentRule{
 	"taskItem":    {first: "paragraph", each: blocks},
 }
 
-// docRule is a Notebook's top-level grammar. My Journal's is `paragraph block*`:
-// the first paragraph is the Title, so it can never be a list or a quote.
-func docRule(notebook string) contentRule {
-	return contentRule{first: "paragraph", each: blocks}
+// docRules are the v1 Notebooks' top-level grammars, by slug; the client's
+// (web/src/page/schema.ts) match. My Journal's is `paragraph block*`: the first
+// paragraph is the Title, so it can never be a list or a quote. I Learned's is
+// `block+`, with no Title.
+var docRules = map[string]contentRule{
+	"my-journal": {first: "paragraph", each: blocks, nonEmpty: true},
+	"i-learned":  {each: blocks, nonEmpty: true},
 }
 
 // checkAttrs checks a node's attrs against what the editor writes for its type.
