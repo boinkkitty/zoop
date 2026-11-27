@@ -20,6 +20,19 @@ type Store interface {
 	// SavePage stores p as the next version if the Page is still at baseVersion (0: never saved),
 	// or returns ErrStale.
 	SavePage(ctx context.Context, userID uuid.UUID, notebook string, day time.Time, baseVersion int, p NewPage) (StoredPage, error)
+
+	// PageTexts returns the start of every written Page from first to last (inclusive), newest first.
+	PageTexts(ctx context.Context, userID uuid.UUID, first, last time.Time) ([]PageText, error)
+
+	// WrittenDaysByMonth counts the Written Days in each month that has any, keyed by the month's 1st.
+	WrittenDaysByMonth(ctx context.Context, userID uuid.UUID) (map[time.Time]int, error)
+}
+
+// PageText is the start of a written Page's plain text: enough for its Title and glimpse.
+type PageText struct {
+	Day      time.Time
+	Notebook string
+	Head     string
 }
 
 var (

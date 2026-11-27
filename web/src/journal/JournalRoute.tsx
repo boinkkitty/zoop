@@ -7,6 +7,7 @@ import { createLazyRoute, useNavigate } from "@tanstack/react-router";
 import { logout } from "../api";
 import { PageEditor } from "../page/PageEditor";
 import { pageQuery } from "../page/queries";
+import { Sidebar } from "../rail/Sidebar";
 import { meQuery } from "../router";
 import styles from "./JournalRoute.module.css";
 
@@ -30,26 +31,29 @@ function JournalRoute() {
   });
 
   return (
-    <main className={styles.desk}>
-      <header className={styles.bar}>
-        <span>{me.email}</span>
-        <button
-          type="button"
-          onClick={() => signOut.mutate()}
-          disabled={signOut.isPending}
-        >
-          Sign out
-        </button>
-      </header>
-      <article className={styles.sheet}>
-        <PageEditor
-          key={`${page.day}/${page.notebook}`}
-          page={page}
-          owner={me.email}
-          today={me.today}
-          timezone={me.timezone}
-        />
-      </article>
-    </main>
+    <div className={styles.app}>
+      <Sidebar me={me} day={day} notebook={notebook} />
+      <main className={styles.desk}>
+        <header className={styles.bar}>
+          <span>{me.email}</span>
+          <button
+            type="button"
+            onClick={() => signOut.mutate()}
+            disabled={signOut.isPending}
+          >
+            Sign out
+          </button>
+        </header>
+        <article className={styles.sheet}>
+          <PageEditor
+            key={`${page.day}/${page.notebook}`}
+            page={page}
+            owner={me.email}
+            today={me.today}
+            timezone={me.timezone}
+          />
+        </article>
+      </main>
+    </div>
   );
 }

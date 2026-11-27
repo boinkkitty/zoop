@@ -47,7 +47,7 @@ export function DayHead({
 }
 
 // clockTime is a moment as a 24-hour wall-clock time in the writer's timezone, like "02:00".
-function clockTime(moment: string, timezone: string) {
+export function clockTime(moment: string, timezone: string) {
   return new Intl.DateTimeFormat(undefined, {
     hour: "2-digit",
     minute: "2-digit",
