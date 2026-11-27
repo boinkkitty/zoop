@@ -1,6 +1,6 @@
 # Every push to main and every PR: all four suites, including Playwright against the Docker image.
 # Deploying to Railway is not wired up yet (#19).
-name: CI and deploy
+name: CI
 
 on:
   push:
