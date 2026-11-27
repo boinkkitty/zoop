@@ -55,6 +55,85 @@ func (s *AuthStore) CreateAccount(ctx context.Context, a auth.NewAccount, first 
 	return userID, tx.Commit(ctx)
 }
 
+func (s *AuthStore) CreateGoogleAccount(ctx context.Context, a auth.NewGoogleAccount, first auth.NewSession) (uuid.UUID, error) {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return uuid.Nil, err
+	}
+	defer tx.Rollback(ctx)
+	q := s.q.WithTx(tx)
+
+	userID, err := q.CreateVerifiedUser(ctx, dbgen.CreateVerifiedUserParams{
+		Email: a.Email, Now: a.CreatedAt, FirstDay: a.FirstDay, Timezone: a.Timezone,
+	})
+	if errors.Is(err, pgx.ErrNoRows) { // ON CONFLICT (email) DO NOTHING
+		return uuid.Nil, auth.ErrEmailTaken
+	}
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("create user: %w", err)
+	}
+	if err := q.CreateGoogleIdentity(ctx, dbgen.CreateGoogleIdentityParams{
+		UserID: userID, Subject: a.Subject, Now: a.CreatedAt,
+	}); err != nil {
+		return uuid.Nil, fmt.Errorf("create google identity: %w", err)
+	}
+	if err := createSession(ctx, q, userID, first); err != nil {
+		return uuid.Nil, err
+	}
+	return userID, tx.Commit(ctx)
+}
+
+func (s *AuthStore) GoogleLogin(ctx context.Context, subject string) (uuid.UUID, error) {
+	id, err := s.q.GetGoogleLogin(ctx, subject)
+	if err != nil {
+		return uuid.Nil, notFound(err)
+	}
+	return id, nil
+}
+
+func (s *AuthStore) UserByEmail(ctx context.Context, email string) (auth.EmailOwner, error) {
+	row, err := s.q.GetUserByEmail(ctx, email)
+	if err != nil {
+		return auth.EmailOwner{}, notFound(err)
+	}
+	return auth.EmailOwner{UserID: row.ID, EmailVerified: row.EmailVerifiedAt != nil}, nil
+}
+
+func (s *AuthStore) LinkGoogle(ctx context.Context, l auth.GoogleLink, first auth.NewSession) error {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+	q := s.q.WithTx(tx)
+
+	if l.TakeOver {
+		_, err := q.VerifyUnverifiedEmail(ctx, dbgen.VerifyUnverifiedEmailParams{ID: l.UserID, Now: l.Now})
+		switch {
+		case errors.Is(err, pgx.ErrNoRows):
+			// Verified since the core looked: the password is the owner's, so it stays.
+		case err != nil:
+			return fmt.Errorf("verify email: %w", err)
+		default:
+			if err := q.DeletePasswordIdentity(ctx, l.UserID); err != nil {
+				return fmt.Errorf("delete password identity: %w", err)
+			}
+			if err := q.DeleteUserSessions(ctx, l.UserID); err != nil {
+				return fmt.Errorf("delete sessions: %w", err)
+			}
+		}
+	}
+	if err := q.CreateGoogleIdentity(ctx, dbgen.CreateGoogleIdentityParams{
+		UserID: l.UserID, Subject: l.Subject, Now: l.Now,
+	}); err != nil {
+		return fmt.Errorf("create google identity: %w", err)
+	}
+	if err := createSession(ctx, q, l.UserID, first); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
+}
+
 func (s *AuthStore) PasswordLogin(ctx context.Context, email string) (uuid.UUID, string, error) {
 	row, err := s.q.GetPasswordLogin(ctx, email)
 	if err != nil {

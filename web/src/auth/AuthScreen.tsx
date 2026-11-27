@@ -1,7 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { type FormEvent, useState } from "react";
-import { login, signup } from "../api";
+import { googleErrors, googleStartURL, login, signup } from "../api";
 import styles from "./AuthScreen.module.css";
 
 type Mode = "signin" | "signup";
@@ -25,7 +25,13 @@ const copy = {
   },
 } as const;
 
-export function AuthScreen({ mode }: { mode: Mode }) {
+export function AuthScreen({
+  mode,
+  googleError,
+}: {
+  mode: Mode;
+  googleError?: string; // the code the Google callback sent back, if it refused
+}) {
   const text = copy[mode];
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -50,6 +56,10 @@ export function AuthScreen({ mode }: { mode: Mode }) {
     <main className={styles.screen}>
       <form className={styles.card} onSubmit={onSubmit}>
         <h1 className={styles.title}>{text.title}</h1>
+        <a className={styles.google} href={googleStartURL()}>
+          Continue with Google
+        </a>
+        <p className={styles.or}>or</p>
         <label className={styles.field}>
           <span>Email</span>
           <input
@@ -71,9 +81,11 @@ export function AuthScreen({ mode }: { mode: Mode }) {
             onChange={(e) => setPassword(e.target.value)}
           />
         </label>
-        {submit.error && (
+        {(submit.error || googleError) && (
           <p role="alert" className={styles.error}>
-            {submit.error.message}
+            {submit.error
+              ? submit.error.message
+              : (googleErrors[googleError ?? ""] ?? googleErrors.google_failed)}
           </p>
         )}
         <button

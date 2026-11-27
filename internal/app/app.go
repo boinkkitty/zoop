@@ -10,6 +10,7 @@ import (
 
 	"github.com/boinkkitty/zoop/internal/auth"
 	"github.com/boinkkitty/zoop/internal/clock"
+	"github.com/boinkkitty/zoop/internal/google"
 	"github.com/boinkkitty/zoop/internal/mail"
 	"github.com/boinkkitty/zoop/internal/postgres"
 	"github.com/boinkkitty/zoop/internal/server"
@@ -19,14 +20,19 @@ import (
 type Deps struct {
 	DB     *pgxpool.Pool
 	Clock  clock.Clock
-	Mailer mail.Mailer // unused until email verification (#33)
-	Assets fs.FS       // the built frontend; must contain index.html
+	Mailer mail.Mailer    // unused until email verification (#33)
+	Assets fs.FS          // the built frontend; must contain index.html
+	Google *google.Config // nil when Google sign-in isn't configured
 }
 
 // New wires the whole app and returns its root handler.
 func New(d Deps) http.Handler {
+	var g auth.GoogleProvider // left nil, not a typed nil, when Google isn't configured
+	if d.Google != nil {
+		g = google.New(*d.Google, d.Clock)
+	}
 	return server.New(server.Deps{
-		Auth:   auth.New(postgres.NewAuthStore(d.DB), d.Clock),
+		Auth:   auth.New(postgres.NewAuthStore(d.DB), d.Clock, g),
 		Ping:   postgres.Ping(d.DB),
 		Assets: d.Assets,
 	})

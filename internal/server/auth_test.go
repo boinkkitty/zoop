@@ -14,28 +14,42 @@ import (
 
 	"github.com/boinkkitty/zoop/internal/app"
 	"github.com/boinkkitty/zoop/internal/clock"
+	"github.com/boinkkitty/zoop/internal/google"
+	"github.com/boinkkitty/zoop/internal/google/googletest"
 	"github.com/boinkkitty/zoop/internal/mail/mailtest"
 	"github.com/boinkkitty/zoop/internal/testenv"
 )
 
 // testApp is the real router behind a real HTTP server, with a Clock the test can move.
+// Its Google is a stub OIDC provider.
 type testApp struct {
-	t     *testing.T
-	srv   *httptest.Server
-	clock *clock.Fake
+	t      *testing.T
+	srv    *httptest.Server
+	clock  *clock.Fake
+	google *googletest.Provider
 }
 
 func startApp(t *testing.T, now time.Time) *testApp {
 	t.Helper()
 	c := clock.NewFake(now)
-	srv := httptest.NewServer(app.New(app.Deps{
+	stub := googletest.Start(t, c.Now)
+	// The app needs its own URL for Google's redirect, so it's built once the server is listening.
+	var h http.Handler
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { h.ServeHTTP(w, r) }))
+	t.Cleanup(srv.Close)
+	h = app.New(app.Deps{
 		DB:     testenv.Pool(t),
 		Clock:  c,
 		Mailer: &mailtest.Fake{},
 		Assets: assets,
-	}))
-	t.Cleanup(srv.Close)
-	return &testApp{t: t, srv: srv, clock: c}
+		Google: &google.Config{
+			Issuer:       stub.Issuer(),
+			ClientID:     googletest.ClientID,
+			ClientSecret: googletest.ClientSecret,
+			RedirectURL:  srv.URL + "/api/v1/auth/google/callback",
+		},
+	})
+	return &testApp{t: t, srv: srv, clock: c, google: stub}
 }
 
 // browser is one device with its own cookies. Unlike net/http/cookiejar it
@@ -107,7 +121,7 @@ func (b *browser) do(method, path string, body any, headers ...string) response 
 		}
 		req.AddCookie(&http.Cookie{Name: c.Name, Value: c.Value})
 	}
-	res, err := http.DefaultClient.Do(req)
+	res, err := noRedirects.Do(req)
 	if err != nil {
 		b.app.t.Fatal(err)
 	}
@@ -121,6 +135,11 @@ func (b *browser) do(method, path string, body any, headers ...string) response 
 	}
 	return response{status: res.StatusCode, header: res.Header, body: out}
 }
+
+// noRedirects hands each redirect back to the test, so the browser can carry cookies across them.
+var noRedirects = &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error {
+	return http.ErrUseLastResponse
+}}
 
 type me struct {
 	Email           string   `json:"email"`

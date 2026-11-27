@@ -37,14 +37,16 @@ type ValidationError struct{ Message string }
 
 func (e *ValidationError) Error() string { return e.Message }
 
-// Service is the auth module. It persists through its Store and tells time by its Clock.
+// Service is the auth module. It persists through its Store, tells time by its Clock,
+// and signs people in with Google through its GoogleProvider (nil if not configured).
 type Service struct {
-	store Store
-	clock clock.Clock
+	store  Store
+	clock  clock.Clock
+	google GoogleProvider
 }
 
-func New(store Store, c clock.Clock) *Service {
-	return &Service{store: store, clock: c}
+func New(store Store, c clock.Clock, google GoogleProvider) *Service {
+	return &Service{store: store, clock: c, google: google}
 }
 
 // Session is a signed-in device.
@@ -108,6 +110,11 @@ func (s *Service) Login(ctx context.Context, email, plain string) (Session, erro
 	if !ok {
 		return Session{}, ErrBadLogin
 	}
+	return s.signIn(ctx, userID)
+}
+
+// signIn starts a new session for an existing account.
+func (s *Service) signIn(ctx context.Context, userID uuid.UUID) (Session, error) {
 	token, sess, err := newSession(s.clock.Now())
 	if err != nil {
 		return Session{}, err
