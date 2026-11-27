@@ -19,6 +19,7 @@ var core = []string{
 	"internal/days",
 	"internal/pages",
 	"internal/ratelimit",
+	"internal/search",
 }
 
 // forbidden are import path prefixes that belong to adapters, never the core.
