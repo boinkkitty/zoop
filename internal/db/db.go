@@ -1,34 +1,20 @@
-// Package db owns the schema: goose migrations embedded in the binary.
+// Package db owns the schema: plain SQL files in migrations/, run by hand in
+// filename order with psql. Nothing in the app applies them.
 package db
 
 import (
-	"context"
 	"embed"
-	"fmt"
 	"io/fs"
-
-	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/jackc/pgx/v5/stdlib"
-	"github.com/pressly/goose/v3"
 )
 
 //go:embed migrations/*.sql
 var embedded embed.FS
 
-// Migrate applies every pending embedded migration.
-func Migrate(ctx context.Context, pool *pgxpool.Pool) error {
-	migrations, err := fs.Sub(embedded, "migrations")
+// Migrations returns the schema files, for the test harness to build throwaway databases.
+func Migrations() fs.FS {
+	sub, err := fs.Sub(embedded, "migrations")
 	if err != nil {
-		return err
+		panic(err)
 	}
-	sqlDB := stdlib.OpenDBFromPool(pool)
-	defer sqlDB.Close()
-	p, err := goose.NewProvider(goose.DialectPostgres, sqlDB, migrations)
-	if err != nil {
-		return fmt.Errorf("goose provider: %w", err)
-	}
-	if _, err := p.Up(ctx); err != nil {
-		return fmt.Errorf("goose up: %w", err)
-	}
-	return nil
+	return sub
 }

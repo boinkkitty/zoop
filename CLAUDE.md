@@ -12,6 +12,11 @@ The five default roles (needs-triage, needs-info, ready-for-agent, ready-for-hum
 
 Single-context: `GLOSSARY.md` and `docs/adr/` at the repo root. See `docs/agents/domain.md`.
 
+## Backend
+
+- **Architecture:** hexagonal. Keep the rules in core packages, separate from the code that talks to HTTP, databases, queues and other external systems. See `docs/adr/0002-hexagonal-architecture.md`.
+- **Migrations:** plain SQL files in `internal/db/migrations/` (`NNNNN_name.sql`, up only, no tool). The user runs them by hand with `psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -1 -f <file>`. Nothing in the app, CI or scripts applies them. The only exception is `testenv`, which applies them all to each throwaway test database.
+
 ## Pull Requests
 
 ### Title
