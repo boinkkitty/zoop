@@ -12,6 +12,40 @@ import (
 	"github.com/google/uuid"
 )
 
+const countWrittenDaysByMonth = `-- name: CountWrittenDaysByMonth :many
+SELECT date_trunc('month', p.day)::date AS month, count(DISTINCT p.day)::int AS written_days
+FROM pages p
+WHERE p.user_id = $1 AND p.plain_text <> ''
+GROUP BY 1
+ORDER BY 1 DESC
+`
+
+type CountWrittenDaysByMonthRow struct {
+	Month       time.Time
+	WrittenDays int32
+}
+
+// Written Days per month over the whole history, from the pages_written partial index.
+func (q *Queries) CountWrittenDaysByMonth(ctx context.Context, userID uuid.UUID) ([]CountWrittenDaysByMonthRow, error) {
+	rows, err := q.db.Query(ctx, countWrittenDaysByMonth, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []CountWrittenDaysByMonthRow
+	for rows.Next() {
+		var i CountWrittenDaysByMonthRow
+		if err := rows.Scan(&i.Month, &i.WrittenDays); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getPage = `-- name: GetPage :one
 SELECT p.doc, p.schema_version, p.version, p.updated_at
 FROM pages p
@@ -45,21 +79,29 @@ func (q *Queries) GetPage(ctx context.Context, arg GetPageParams) (GetPageRow, e
 }
 
 const getWriter = `-- name: GetWriter :one
-SELECT plan, first_day, timezone
+SELECT plan, first_day, timezone, next_timezone, timezone_switch_day
 FROM users
 WHERE id = $1 AND deleted_at IS NULL
 `
 
 type GetWriterRow struct {
-	Plan     string
-	FirstDay time.Time
-	Timezone string
+	Plan              string
+	FirstDay          time.Time
+	Timezone          string
+	NextTimezone      *string
+	TimezoneSwitchDay *time.Time
 }
 
 func (q *Queries) GetWriter(ctx context.Context, id uuid.UUID) (GetWriterRow, error) {
 	row := q.db.QueryRow(ctx, getWriter, id)
 	var i GetWriterRow
-	err := row.Scan(&i.Plan, &i.FirstDay, &i.Timezone)
+	err := row.Scan(
+		&i.Plan,
+		&i.FirstDay,
+		&i.Timezone,
+		&i.NextTimezone,
+		&i.TimezoneSwitchDay,
+	)
 	return i, err
 }
 
@@ -106,6 +148,47 @@ func (q *Queries) InsertPage(ctx context.Context, arg InsertPageParams) (InsertP
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const listPageTexts = `-- name: ListPageTexts :many
+SELECT p.day, n.slug AS notebook, left(p.plain_text, 400)::text AS head
+FROM pages p
+JOIN notebooks n ON n.id = p.notebook_id
+WHERE p.user_id = $1 AND p.day BETWEEN $2 AND $3 AND p.plain_text <> ''
+ORDER BY p.day DESC
+`
+
+type ListPageTextsParams struct {
+	UserID  uuid.UUID
+	FromDay time.Time
+	ToDay   time.Time
+}
+
+type ListPageTextsRow struct {
+	Day      time.Time
+	Notebook string
+	Head     string
+}
+
+// The start of each written Page in from_day..to_day: enough for Titles and glimpses.
+func (q *Queries) ListPageTexts(ctx context.Context, arg ListPageTextsParams) ([]ListPageTextsRow, error) {
+	rows, err := q.db.Query(ctx, listPageTexts, arg.UserID, arg.FromDay, arg.ToDay)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPageTextsRow
+	for rows.Next() {
+		var i ListPageTextsRow
+		if err := rows.Scan(&i.Day, &i.Notebook, &i.Head); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const updatePage = `-- name: UpdatePage :one

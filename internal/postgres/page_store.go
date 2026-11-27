@@ -30,7 +30,10 @@ func (s *PageStore) Writer(ctx context.Context, userID uuid.UUID) (pages.Writer,
 	if err != nil {
 		return pages.Writer{}, pageNotFound(err)
 	}
-	return pages.Writer{Plan: w.Plan, FirstDay: w.FirstDay, Timezone: w.Timezone}, nil
+	return pages.Writer{
+		Plan: w.Plan, FirstDay: w.FirstDay,
+		Timezone: w.Timezone, NextTimezone: w.NextTimezone, SwitchDay: w.TimezoneSwitchDay,
+	}, nil
 }
 
 func (s *PageStore) Page(ctx context.Context, userID uuid.UUID, notebook string, day time.Time) (pages.StoredPage, error) {
@@ -77,4 +80,28 @@ func pageNotFound(err error) error {
 		return pages.ErrNotFound
 	}
 	return err
+}
+
+func (s *PageStore) PageTexts(ctx context.Context, userID uuid.UUID, first, last time.Time) ([]pages.PageText, error) {
+	rows, err := s.q.ListPageTexts(ctx, dbgen.ListPageTextsParams{UserID: userID, FromDay: first, ToDay: last})
+	if err != nil {
+		return nil, err
+	}
+	texts := make([]pages.PageText, len(rows))
+	for i, r := range rows {
+		texts[i] = pages.PageText{Day: r.Day, Notebook: r.Notebook, Head: r.Head}
+	}
+	return texts, nil
+}
+
+func (s *PageStore) WrittenDaysByMonth(ctx context.Context, userID uuid.UUID) (map[time.Time]int, error) {
+	rows, err := s.q.CountWrittenDaysByMonth(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	counts := make(map[time.Time]int, len(rows))
+	for _, r := range rows {
+		counts[r.Month] = int(r.WrittenDays)
+	}
+	return counts, nil
 }

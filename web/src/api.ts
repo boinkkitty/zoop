@@ -1,4 +1,5 @@
 import type { JSONContent } from "@tiptap/core";
+import type { Notebook } from "./page/notebooks";
 
 // The JSON API client. Errors arrive as {error: {code, message}}.
 
@@ -45,6 +46,7 @@ export type Me = {
   plan: "free" | "premium";
   timezone: string;
   pendingTimezone: string | null;
+  timezoneSwitchDay: string | null; // the first Day on pendingTimezone's time
   firstDay: string;
   today: string;
   graceUntil: string | null;
@@ -53,12 +55,16 @@ export type Me = {
 
 export const getMe = () => request<Me>("GET", "/me");
 
+// setTimezone starts the user's Days on timezone's time from tomorrow; the zone in use cancels a pending switch.
+export const setTimezone = (timezone: string) =>
+  request<Me>("PATCH", "/me", { timezone });
+
 // A Page document as TipTap writes it. Type-only, so this file never loads TipTap.
 export type Doc = { type: "doc"; content?: JSONContent[] };
 
 export type Page = {
   day: string;
-  notebook: string;
+  notebook: Notebook;
   doc: Doc;
   schemaVersion: number;
   version: number;
@@ -72,6 +78,34 @@ export const pagePath = (day: string, notebook: string) =>
 
 export const getPage = (day: string, notebook: string) =>
   request<Page>("GET", pagePath(day, notebook));
+
+// One Day in the rail. Titles and glimpses are derived by the server from the Pages.
+export type Island = {
+  day: string;
+  written: boolean;
+  title: string;
+  glimpses: Record<string, string>;
+};
+
+// A month of Islands, newest first, with the neighbouring months to page to (null at either end).
+export type RailMonth = {
+  month: string;
+  days: Island[];
+  newerMonth: string | null;
+  olderMonth: string | null;
+};
+
+export const getMonth = (month: string) =>
+  request<RailMonth>("GET", `/days?month=${encodeURIComponent(month)}`);
+
+export type DaysSummary = {
+  firstDay: string;
+  today: string;
+  months: { month: string; writtenDays: number }[];
+};
+
+export const getDaysSummary = () =>
+  request<DaysSummary>("GET", "/days/summary");
 
 export const signup = (email: string, password: string) =>
   request<void>("POST", "/auth/signup", {
@@ -116,3 +150,5 @@ export const forgotPassword = (email: string) =>
 
 export const resetPassword = (token: string, password: string) =>
   request<void>("POST", "/auth/password/reset", { token, password });
+export const isNotFound = (err: unknown) =>
+  err instanceof ApiError && err.code === "not_found";

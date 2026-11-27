@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Page } from "../api";
 import { createPageSaver, type SaverDeps } from "./saver";
+import { SCHEMA_VERSION } from "./schema";
 
 const day = "2026-11-26";
 const notebook = "my-journal";
@@ -14,7 +15,7 @@ const page = (version: number, d = doc("")): Page => ({
   day,
   notebook,
   doc: d,
-  schemaVersion: 1,
+  schemaVersion: SCHEMA_VERSION,
   version,
   updatedAt: version ? "2026-11-25T20:00:00Z" : null,
   editable: true,
@@ -112,7 +113,7 @@ describe("autosave", () => {
     expect(server.sent).toEqual([
       {
         url: "/api/v1/pages/2026-11-26/my-journal",
-        body: { doc: doc("Ra"), schemaVersion: 1, baseVersion: 0 },
+        body: { doc: doc("Ra"), schemaVersion: SCHEMA_VERSION, baseVersion: 0 },
         keepalive: false,
       },
     ]);
@@ -175,8 +176,8 @@ describe("the save queue", () => {
     release(json(200, page(1, doc("one"))));
     await vi.advanceTimersByTimeAsync(0);
     expect(server.sent.map((r) => r.body)).toEqual([
-      { doc: doc("one"), schemaVersion: 1, baseVersion: 0 },
-      { doc: doc("three"), schemaVersion: 1, baseVersion: 1 },
+      { doc: doc("one"), schemaVersion: SCHEMA_VERSION, baseVersion: 0 },
+      { doc: doc("three"), schemaVersion: SCHEMA_VERSION, baseVersion: 1 },
     ]);
   });
 
@@ -257,7 +258,11 @@ describe("words kept on this device", () => {
     expect(back.restored).toEqual(doc("Offline thoughts"));
     await vi.advanceTimersByTimeAsync(0);
     expect(server.sent.slice(before).map((r) => r.body)).toEqual([
-      { doc: doc("Offline thoughts"), schemaVersion: 1, baseVersion: 4 },
+      {
+        doc: doc("Offline thoughts"),
+        schemaVersion: SCHEMA_VERSION,
+        baseVersion: 4,
+      },
     ]);
     expect(saver(page(5)).restored).toBeNull();
   });
@@ -274,7 +279,11 @@ describe("words kept on this device", () => {
     s.flushOnUnload();
     expect(server.sent.at(-1)).toEqual({
       url: "/api/v1/pages/2026-11-26/my-journal",
-      body: { doc: doc("last words"), schemaVersion: 1, baseVersion: 2 },
+      body: {
+        doc: doc("last words"),
+        schemaVersion: SCHEMA_VERSION,
+        baseVersion: 2,
+      },
       keepalive: true,
     });
   });
@@ -387,7 +396,7 @@ describe("save conflicts", () => {
     await vi.advanceTimersByTimeAsync(0);
     expect(server.sent.at(-1)?.body).toEqual({
       doc: doc("Before the update, and after"),
-      schemaVersion: 1,
+      schemaVersion: SCHEMA_VERSION,
       baseVersion: 1,
     });
   });
@@ -419,7 +428,7 @@ describe("save conflicts", () => {
     await vi.advanceTimersByTimeAsync(0);
     expect(server.sent.at(-1)?.body).toEqual({
       doc: doc("Morning, from my laptop"),
-      schemaVersion: 1,
+      schemaVersion: SCHEMA_VERSION,
       baseVersion: 2,
     });
     expect(s.status().conflict).toBeNull();

@@ -1,4 +1,4 @@
-import { type BrowserContext, expect, test } from "@playwright/test";
+import { type BrowserContext, expect, test } from "./fixtures";
 
 // The 02:00 lock, with time moved on both sides: Playwright's clock in the browser,
 // and the test-only server clock (built with -tags testclock), shifted per browser by a cookie.
@@ -49,7 +49,10 @@ test("yesterday's Page turns read only at 02:00 without losing the last words", 
   await serverNow(context, base, at(next, "01:59:50"));
   await page.clock.setSystemTime(at(next, "01:59:50"));
   await page.goto(`/day/${day}/my-journal`);
-  await expect(page.getByText("Still open until 02:00")).toBeVisible();
+  // exact: yesterday's Island in the rail also says "Still open until 02:00 · N min left".
+  await expect(
+    page.getByText("Still open until 02:00", { exact: true }),
+  ).toBeVisible();
   const editor = page.getByRole("textbox", { name: "Page" });
 
   // Typed half a second before 02:00, with no pause for the 1s autosave:

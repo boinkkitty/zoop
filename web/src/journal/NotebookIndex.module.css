@@ -1,0 +1,49 @@
+/* An index column inset in the sheet's right edge, behind a hairline. */
+.index {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 52px;
+  display: flex;
+  flex-direction: column;
+  padding-top: 64px;
+  border-left: 1px solid var(--color-hairline);
+}
+
+.tab {
+  writing-mode: vertical-rl;
+  padding: 16px 0;
+  text-align: center;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  text-decoration: none;
+  color: var(--color-faint);
+  transition:
+    color 0.2s,
+    box-shadow 0.3s var(--ease-spring);
+}
+
+.tab:hover {
+  color: var(--color-muted);
+}
+
+.tab:focus-visible {
+  outline: 2px solid #0a84ff;
+  outline-offset: -2px;
+}
+
+/* The open Notebook: black, with a 2px edge on the hairline. */
+.tab[aria-current="page"] {
+  color: var(--color-ink);
+  font-weight: 650;
+  box-shadow: inset 2px 0 0 var(--color-ink);
+}
+
+@media (max-width: 720px) {
+  .index {
+    padding-top: 40px;
+  }
+}

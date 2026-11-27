@@ -219,6 +219,7 @@ type Account struct {
 	Plan            string
 	Timezone        string
 	PendingTimezone *string
+	SwitchDay       *time.Time // the first Day on PendingTimezone's time
 	FirstDay        time.Time
 	Today           time.Time
 	GraceUntil      *time.Time
@@ -227,29 +228,75 @@ type Account struct {
 
 // Account describes userID as of now.
 func (s *Service) Account(ctx context.Context, userID uuid.UUID) (Account, error) {
-	u, err := s.store.User(ctx, userID)
-	if errors.Is(err, ErrNotFound) {
-		return Account{}, ErrNoSession
-	}
+	now := s.clock.Now(ctx)
+	u, cal, err := s.user(ctx, userID, now)
 	if err != nil {
 		return Account{}, err
 	}
-	loc, err := time.LoadLocation(u.Timezone)
+	a := Account{
+		Email:         u.Email,
+		EmailVerified: u.EmailVerifiedAt != nil,
+		Plan:          u.Plan,
+		Timezone:      cal.ZoneAt(now).String(),
+		FirstDay:      u.FirstDay,
+		Today:         cal.Today(now),
+		GraceUntil:    cal.GraceUntil(now),
+		SignInMethods: u.SignInMethods,
+	}
+	if cal.Next != nil && !cal.Switched(now) {
+		next, day := cal.Next.String(), cal.SwitchDay
+		a.PendingTimezone, a.SwitchDay = &next, &day
+	}
+	return a, nil
+}
+
+// SetTimezone starts userID's Days on timezone's time from tomorrow, so no Day is skipped or repeated.
+// Choosing the timezone already in use cancels a pending switch.
+func (s *Service) SetTimezone(ctx context.Context, userID uuid.UUID, timezone string) (Account, error) {
+	to, err := loadTimezone(timezone)
 	if err != nil {
-		return Account{}, fmt.Errorf("stored timezone %q: %w", u.Timezone, err)
+		return Account{}, err
 	}
 	now := s.clock.Now(ctx)
-	return Account{
-		Email:           u.Email,
-		EmailVerified:   u.EmailVerifiedAt != nil,
-		Plan:            u.Plan,
-		Timezone:        u.Timezone,
-		PendingTimezone: u.NextTimezone,
-		FirstDay:        u.FirstDay,
-		Today:           days.Today(now, loc),
-		GraceUntil:      days.GraceUntil(now, loc),
-		SignInMethods:   u.SignInMethods,
-	}, nil
+	_, cal, err := s.user(ctx, userID, now)
+	if err != nil {
+		return Account{}, err
+	}
+	if err := s.store.SetTimezone(ctx, userID, storedTimezone(cal.Switch(to, now)), now); err != nil {
+		return Account{}, err
+	}
+	return s.Account(ctx, userID)
+}
+
+// user loads a live account and its Calendar, storing a switch that has settled into its timezone.
+func (s *Service) user(ctx context.Context, userID uuid.UUID, now time.Time) (StoredUser, days.Calendar, error) {
+	u, err := s.store.User(ctx, userID)
+	if errors.Is(err, ErrNotFound) {
+		return StoredUser{}, days.Calendar{}, ErrNoSession
+	}
+	if err != nil {
+		return StoredUser{}, days.Calendar{}, err
+	}
+	cal, err := days.LoadCalendar(u.Timezone, u.NextTimezone, u.SwitchDay)
+	if err != nil {
+		return StoredUser{}, days.Calendar{}, err
+	}
+	if settled := cal.Settle(now); settled.Next == nil && cal.Next != nil {
+		if err := s.store.SetTimezone(ctx, userID, storedTimezone(settled), now); err != nil {
+			return StoredUser{}, days.Calendar{}, err
+		}
+		cal = settled
+	}
+	return u, cal, nil
+}
+
+func storedTimezone(c days.Calendar) StoredTimezone {
+	tz := StoredTimezone{Timezone: c.Zone.String()}
+	if c.Next != nil {
+		next, day := c.Next.String(), c.SwitchDay
+		tz.NextTimezone, tz.SwitchDay = &next, &day
+	}
+	return tz
 }
 
 // newSession makes a fresh random token, returning it and the session to store under its hash.

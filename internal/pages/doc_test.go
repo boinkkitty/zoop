@@ -57,9 +57,11 @@ func TestValidDocsAreAcceptedWithTheirPlainText(t *testing.T) {
 func TestInvalidDocsAreRefused(t *testing.T) {
 	for name, fx := range loadFixtures(t, "invalid") {
 		t.Run(name, func(t *testing.T) {
-			if _, err := pages.ParseDoc(fx.Notebook, fx.Doc); err == nil {
-				t.Errorf("ParseDoc accepted a doc that should be refused: %s", fx.Why)
+			_, err := pages.ParseDoc(fx.Notebook, fx.Doc)
+			if err == nil {
+				t.Fatalf("ParseDoc accepted a doc that should be refused: %s", fx.Why)
 			}
+			t.Logf("refused (%s): %v", fx.Why, err)
 		})
 	}
 }

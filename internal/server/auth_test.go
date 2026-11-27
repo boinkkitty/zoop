@@ -156,15 +156,16 @@ var noRedirects = &http.Client{CheckRedirect: func(*http.Request, []*http.Reques
 }}
 
 type me struct {
-	Email           string   `json:"email"`
-	EmailVerified   bool     `json:"emailVerified"`
-	Plan            string   `json:"plan"`
-	Timezone        string   `json:"timezone"`
-	PendingTimezone *string  `json:"pendingTimezone"`
-	FirstDay        string   `json:"firstDay"`
-	Today           string   `json:"today"`
-	GraceUntil      *string  `json:"graceUntil"`
-	SignInMethods   []string `json:"signInMethods"`
+	Email             string   `json:"email"`
+	EmailVerified     bool     `json:"emailVerified"`
+	Plan              string   `json:"plan"`
+	Timezone          string   `json:"timezone"`
+	PendingTimezone   *string  `json:"pendingTimezone"`
+	TimezoneSwitchDay *string  `json:"timezoneSwitchDay"`
+	FirstDay          string   `json:"firstDay"`
+	Today             string   `json:"today"`
+	GraceUntil        *string  `json:"graceUntil"`
+	SignInMethods     []string `json:"signInMethods"`
 }
 
 func (b *browser) me() (me, response) {

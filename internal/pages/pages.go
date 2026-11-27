@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 	"unicode/utf8"
 
@@ -122,6 +123,9 @@ func (s *Service) Save(ctx context.Context, userID uuid.UUID, day time.Time, not
 	if utf8.RuneCountInString(plain) > MaxChars {
 		return Page{}, ErrTooLong
 	}
+	if strings.TrimSpace(plain) == "" {
+		plain = "" // an emptied Page: only blank lines don't make a Written Day
+	}
 	stored, err := s.store.SavePage(ctx, userID, notebook, day, in.BaseVersion, NewPage{
 		Doc: in.Doc, SchemaVersion: in.SchemaVersion, PlainText: plain, Now: w.now,
 	})
@@ -145,7 +149,7 @@ func (s *Service) Save(ctx context.Context, userID uuid.UUID, day time.Time, not
 
 type writer struct {
 	Writer
-	loc   *time.Location
+	cal   days.Calendar
 	now   time.Time
 	today time.Time
 }
@@ -155,19 +159,19 @@ func (s *Service) writer(ctx context.Context, userID uuid.UUID) (writer, error) 
 	if err != nil {
 		return writer{}, err
 	}
-	loc, err := time.LoadLocation(w.Timezone)
+	cal, err := days.LoadCalendar(w.Timezone, w.NextTimezone, w.SwitchDay)
 	if err != nil {
-		return writer{}, fmt.Errorf("stored timezone %q: %w", w.Timezone, err)
+		return writer{}, err
 	}
 	now := s.clock.Now(ctx)
-	return writer{Writer: w, loc: loc, now: now, today: days.Today(now, loc)}, nil
+	return writer{Writer: w, cal: cal, now: now, today: cal.Today(now)}, nil
 }
 
 // access says whether day is editable now, and when it stops being.
 func (w writer) access(day time.Time) (bool, *time.Time) { return w.accessAt(day, w.now) }
 
 func (w writer) accessAt(day, now time.Time) (bool, *time.Time) {
-	return days.Access(days.Writer{Premium: w.Plan == "premium", FirstDay: w.FirstDay, Loc: w.loc}, day, now)
+	return days.Access(days.Writer{Premium: w.Plan == "premium", FirstDay: w.FirstDay, Calendar: w.cal}, day, now)
 }
 
 // writable says whether a save of day arriving now counts: a save the editor sent

@@ -1,0 +1,42 @@
+{
+  "notebook": "i-learned",
+  "doc": {
+    "type": "doc",
+    "content": [
+      {
+        "type": "bulletList",
+        "content": [
+          {
+            "type": "listItem",
+            "content": [
+              {
+                "type": "paragraph",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "Rust lifetimes are scopes"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "type": "blockquote",
+        "content": [
+          {
+            "type": "paragraph",
+            "content": [
+              {
+                "type": "text",
+                "text": "not durations"
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "plainText": "Rust lifetimes are scopes\nnot durations"
+}
