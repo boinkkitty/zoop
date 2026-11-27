@@ -58,7 +58,7 @@ func (s *Service) ResendVerify(ctx context.Context, rawEmail Email, clientIP str
 	if errors.Is(err, ErrNotFound) {
 		return nil
 	}
-	if err != nil || owner.EmailVerified {
+	if err != nil || owner.EmailVerified || owner.Deactivated {
 		return err
 	}
 	return s.sendVerify(ctx, owner.UserID, string(email))
@@ -76,7 +76,7 @@ func (s *Service) ForgotPassword(ctx context.Context, rawEmail Email, clientIP s
 	if errors.Is(err, ErrNotFound) {
 		return nil
 	}
-	if err != nil {
+	if err != nil || owner.Deactivated {
 		return err
 	}
 	token, err := s.emailToken(ctx, owner.UserID, PurposeReset, ResetLifetime)

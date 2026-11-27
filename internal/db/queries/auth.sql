@@ -19,13 +19,15 @@ INSERT INTO auth_identities (user_id, provider, subject, created_at)
 VALUES (@user_id, 'google', @subject, @now);
 
 -- name: GetGoogleLogin :one
-SELECT u.id
+-- Deactivated Accounts too, so the sign-in can say the account is gone.
+SELECT u.id, u.deleted_at
 FROM users u
 JOIN auth_identities i ON i.user_id = u.id AND i.provider = 'google'
-WHERE i.subject = @subject AND u.deleted_at IS NULL;
+WHERE i.subject = @subject;
 
 -- name: GetUserByEmail :one
-SELECT id, email_verified_at FROM users WHERE email = @email AND deleted_at IS NULL;
+-- Deactivated Accounts too: their emails stay taken.
+SELECT id, email_verified_at, deleted_at FROM users WHERE email = @email;
 
 -- name: VerifyUnverifiedEmail :one
 -- Only matches while the email is still unverified, so a takeover never removes a verified password.
@@ -40,10 +42,11 @@ DELETE FROM auth_identities WHERE user_id = @user_id AND provider = 'password';
 DELETE FROM sessions WHERE user_id = @user_id;
 
 -- name: GetPasswordLogin :one
-SELECT u.id, i.password_hash
+-- Deactivated Accounts too, so the right password can be told the account is gone.
+SELECT u.id, i.password_hash, u.deleted_at
 FROM users u
 JOIN auth_identities i ON i.user_id = u.id AND i.provider = 'password'
-WHERE u.email = @email AND u.deleted_at IS NULL;
+WHERE u.email = @email;
 
 -- name: CreateSession :exec
 INSERT INTO sessions (token_hash, user_id, created_at, last_seen_at, expires_at)
@@ -76,3 +79,8 @@ SELECT provider FROM auth_identities WHERE user_id = @user_id ORDER BY provider;
 UPDATE users
 SET timezone = @timezone, next_timezone = @next_timezone, timezone_switch_day = @timezone_switch_day, updated_at = @now
 WHERE id = @id AND deleted_at IS NULL;
+
+-- name: DeactivateUser :one
+UPDATE users SET deleted_at = @now::timestamptz, updated_at = @now
+WHERE id = @id AND deleted_at IS NULL
+RETURNING email;

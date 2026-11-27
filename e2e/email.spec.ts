@@ -88,6 +88,7 @@ test("a forgotten password is reset from the sign-in screen", async ({
 }) => {
   const email = newEmail();
   await signUp(page, email);
+  await page.getByRole("button", { name: "Settings" }).click();
   await page.getByRole("button", { name: "Sign out" }).click();
   await expect(page).toHaveURL(/\/signin$/);
 

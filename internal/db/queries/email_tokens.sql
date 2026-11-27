@@ -22,3 +22,6 @@ ON CONFLICT (user_id, provider) DO UPDATE SET password_hash = excluded.password_
 
 -- name: DeleteExpiredEmailTokens :execrows
 DELETE FROM email_tokens WHERE expires_at <= @now;
+
+-- name: DeleteUserEmailTokens :exec
+DELETE FROM email_tokens WHERE user_id = @user_id;

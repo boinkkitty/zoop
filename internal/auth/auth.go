@@ -32,6 +32,8 @@ var (
 	ErrEmailTaken = errors.New("auth: email already has an account")
 	ErrBadLogin   = errors.New("auth: wrong email or password")
 	ErrNoSession  = errors.New("auth: no live session")
+	// ErrDeactivated means the sign-in was for a Deactivated Account, which can't be signed into.
+	ErrDeactivated = errors.New("auth: account was deactivated")
 )
 
 // ValidationError is a problem with what the visitor typed, safe to show them.
@@ -140,7 +142,7 @@ func (s *Service) login(ctx context.Context, email Email, plain Password) (Sessi
 	if len(plain) > password.MaxBytes {
 		return Session{}, ErrBadLogin
 	}
-	userID, hash, err := s.store.PasswordLogin(ctx, string(email))
+	id, err := s.store.PasswordLogin(ctx, string(email))
 	if errors.Is(err, ErrNotFound) {
 		// Spend the same time as a real check, so timing doesn't reveal it either.
 		_, _ = password.Verify(dummyHash, string(plain))
@@ -149,14 +151,18 @@ func (s *Service) login(ctx context.Context, email Email, plain Password) (Sessi
 	if err != nil {
 		return Session{}, err
 	}
-	ok, err := password.Verify(hash, string(plain))
+	ok, err := password.Verify(id.PasswordHash, string(plain))
 	if err != nil {
 		return Session{}, fmt.Errorf("verify stored hash: %w", err)
 	}
 	if !ok {
 		return Session{}, ErrBadLogin
 	}
-	return s.signIn(ctx, userID)
+	// Only the right password learns the account is gone, so guessing can't find Deactivated Accounts.
+	if id.Deactivated {
+		return Session{}, ErrDeactivated
+	}
+	return s.signIn(ctx, id.UserID)
 }
 
 // signIn starts a new session for an existing account.

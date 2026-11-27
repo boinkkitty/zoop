@@ -80,7 +80,10 @@ func (s *Service) FinishGoogle(ctx context.Context, flow GoogleFlow, state, code
 	}
 
 	// Identities are keyed on Google's sub: the email on a Google account can change.
-	userID, err := s.store.GoogleLogin(ctx, who.Subject)
+	userID, deactivated, err := s.store.GoogleLogin(ctx, who.Subject)
+	if err == nil && deactivated {
+		return Session{}, ErrDeactivated
+	}
 	if err == nil {
 		return s.signIn(ctx, userID)
 	}
@@ -106,6 +109,9 @@ func (s *Service) FinishGoogle(ctx context.Context, flow GoogleFlow, state, code
 	// Google vouches for the email, so whoever holds it here may sign in with Google.
 	// If it was never verified here, the password on it may be a pre-registrant's: it goes.
 	owner, err := s.store.UserByEmail(ctx, string(email))
+	if err == nil && owner.Deactivated {
+		return Session{}, ErrDeactivated
+	}
 	if err == nil {
 		link := GoogleLink{UserID: owner.UserID, Subject: who.Subject, TakeOver: !owner.EmailVerified, Now: now}
 		if err := s.store.LinkGoogle(ctx, link, first); err != nil {
