@@ -95,6 +95,11 @@ export function AuthScreen({
         >
           {text.submit}
         </button>
+        {mode === "signin" && (
+          <p className={styles.switch}>
+            <Link to="/forgot">Forgot password?</Link>
+          </p>
+        )}
         <p className={styles.switch}>
           {text.switchPrompt} <Link to={text.switchTo}>{text.switchLink}</Link>
         </p>

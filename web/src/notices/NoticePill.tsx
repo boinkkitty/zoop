@@ -6,6 +6,7 @@ export type Notice = {
   id: NoticeId;
   text: string;
   actions: { label: string; onClick: () => void }[];
+  status?: string; // a short word in place of the actions, e.g. "Sent again"
   // Called when a dismissible Notice is closed, to remember it beyond this pill.
   onDismiss?: () => void;
 };
@@ -33,6 +34,7 @@ export function NoticePill({ notices }: { notices: Notice[] }) {
               {a.label}
             </button>
           ))}
+          {n.status && <span className={styles.status}>{n.status}</span>}
           {canDismiss(n.id) && (
             <button
               type="button"

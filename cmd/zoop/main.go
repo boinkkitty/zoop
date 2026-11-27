@@ -22,6 +22,7 @@ import (
 	"github.com/boinkkitty/zoop/internal/google"
 	"github.com/boinkkitty/zoop/internal/logging"
 	"github.com/boinkkitty/zoop/internal/mail"
+	"github.com/boinkkitty/zoop/internal/mail/resend"
 	"github.com/boinkkitty/zoop/web"
 )
 
@@ -71,11 +72,18 @@ func run() error {
 	}
 	defer pool.Close()
 
+	mailer, appURL, err := mailConfig(port)
+	if err != nil {
+		return err
+	}
+
 	c, shift := withTestClock(clock.System{})
+	mailer, outbox := withTestOutbox(mailer)
 	deps := app.Deps{
 		DB:     pool,
 		Clock:  c,
-		Mailer: mail.Unconfigured{},
+		Mailer: mailer,
+		AppURL: appURL,
 		Assets: web.Dist(),
 		Google: googleCfg,
 		Logs:   os.Stdout,
@@ -85,7 +93,7 @@ func run() error {
 
 	srv := &http.Server{
 		Addr:              ":" + port,
-		Handler:           shift(app.New(deps)),
+		Handler:           shift(outbox(app.New(deps))),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 
@@ -103,6 +111,25 @@ func run() error {
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	return srv.Shutdown(shutdownCtx)
+}
+
+// mailConfig reads the Resend account and the app's public URL, which emailed links point at.
+// With no RESEND_API_KEY, no email is sent: signup still works, and the failures are reported.
+func mailConfig(port string) (mail.Mailer, string, error) {
+	appURL := os.Getenv("APP_URL") // https://<host>
+	key := os.Getenv("RESEND_API_KEY")
+	if key == "" {
+		slog.Warn("RESEND_API_KEY is not set: no email will be sent")
+		if appURL == "" {
+			appURL = "http://localhost:" + port
+		}
+		return mail.Unconfigured{}, appURL, nil
+	}
+	from := os.Getenv("MAIL_FROM") // e.g. Zoop <hello@zoop.app>, on a domain verified in Resend
+	if from == "" || appURL == "" {
+		return nil, "", errors.New("RESEND_API_KEY is set, so MAIL_FROM and APP_URL must be too")
+	}
+	return resend.New(resend.Config{APIKey: key, From: from}), appURL, nil
 }
 
 // googleConfig reads Google sign-in's OAuth client from the environment. With no

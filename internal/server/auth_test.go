@@ -29,6 +29,7 @@ type testApp struct {
 	srv    *httptest.Server
 	clock  *clock.Fake
 	google *googletest.Provider
+	mail   *mailtest.Fake
 }
 
 func startApp(t *testing.T, now time.Time) *testApp {
@@ -39,10 +40,12 @@ func startApp(t *testing.T, now time.Time) *testApp {
 	var h http.Handler
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { h.ServeHTTP(w, r) }))
 	t.Cleanup(srv.Close)
+	outbox := &mailtest.Fake{}
 	h = app.New(app.Deps{
 		DB:     testenv.Pool(t),
 		Clock:  c,
-		Mailer: &mailtest.Fake{},
+		Mailer: outbox,
+		AppURL: srv.URL,
 		Assets: assets,
 		Google: &google.Config{
 			Issuer:       stub.Issuer(),
@@ -51,7 +54,7 @@ func startApp(t *testing.T, now time.Time) *testApp {
 			RedirectURL:  srv.URL + "/api/v1/auth/google/callback",
 		},
 	})
-	return &testApp{t: t, srv: srv, clock: c, google: stub}
+	return &testApp{t: t, srv: srv, clock: c, google: stub, mail: outbox}
 }
 
 // browser is one device with its own cookies and its own IP address. Unlike

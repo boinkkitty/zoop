@@ -8,6 +8,11 @@ import {
 } from "@tanstack/react-router";
 import { getMe, isNotFound, isUnauthenticated } from "./api";
 import { AuthScreen } from "./auth/AuthScreen";
+import {
+  ForgotScreen,
+  ResetScreen,
+  VerifyScreen,
+} from "./auth/EmailLinkScreens";
 import { isNotebook } from "./page/notebooks";
 import { pageQuery } from "./page/queries";
 
@@ -60,6 +65,35 @@ const signupRoute = createRoute({
   component: () => <AuthScreen mode="signup" />,
 });
 
+const tokenSearch = (search: Record<string, unknown>): { token: string } => ({
+  token: typeof search.token === "string" ? search.token : "",
+});
+
+// The emailed links land here. Each POSTs its token, so a scanner's GET of the link can't use it up.
+const verifyRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/verify",
+  validateSearch: tokenSearch,
+  component: function Verify() {
+    return <VerifyScreen token={verifyRoute.useSearch().token} />;
+  },
+});
+
+const resetRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/reset",
+  validateSearch: tokenSearch,
+  component: function Reset() {
+    return <ResetScreen token={resetRoute.useSearch().token} />;
+  },
+});
+
+const forgotRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/forgot",
+  component: ForgotScreen,
+});
+
 // Lazy, so the auth screens never download the signed-in app (or, later, the editor).
 // A Page that isn't there (an unknown Notebook, a Day outside the journal) goes home, like unknown paths.
 const dayRoute = createRoute({
@@ -96,6 +130,9 @@ export const router = createRouter({
     indexRoute,
     signinRoute,
     signupRoute,
+    verifyRoute,
+    resetRoute,
+    forgotRoute,
     dayRoute,
     notFoundRoute,
   ]),

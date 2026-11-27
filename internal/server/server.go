@@ -50,6 +50,10 @@ func New(d Deps) http.Handler {
 			v1.Post("/auth/signup", signup(authn, rep))
 			v1.Post("/auth/login", login(authn, rep))
 			v1.Post("/auth/logout", logout(authn, rep))
+			v1.Post("/auth/verify", verifyEmail(authn, rep))
+			v1.Post("/auth/verify/resend", resendVerify(authn, rep))
+			v1.Post("/auth/password/forgot", forgotPassword(authn, rep))
+			v1.Post("/auth/password/reset", resetPassword(authn, rep))
 			v1.Get("/auth/google/start", googleStart(authn, rep))
 			v1.Get("/auth/google/callback", googleCallback(authn, rep))
 			v1.Group(func(signedIn chi.Router) {

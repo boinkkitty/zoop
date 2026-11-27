@@ -4,8 +4,9 @@ import type { Editor } from "@tiptap/core";
 import { Placeholder, UndoRedo } from "@tiptap/extensions";
 import { EditorContent, useEditor } from "@tiptap/react";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
-import type { Page } from "../api";
+import { type Page, resendVerify } from "../api";
 import { type Notice, NoticePill } from "../notices/NoticePill";
+import { type ResendState, verifyEmailNotice } from "../notices/verifyEmail";
 import { railKey } from "../rail/queries";
 import { DayHead } from "./DayHead";
 import { editorOptions } from "./formatting";
@@ -26,12 +27,14 @@ const notebookWords: Record<Notebook, Words> = {
 export function PageEditor({
   page,
   owner,
+  emailVerified,
   today,
   timezone,
   accountNotices = [],
 }: {
   page: Page;
   owner: string;
+  emailVerified: boolean;
   today: string;
   timezone: string;
   accountNotices?: Notice[]; // about the account rather than this Page
@@ -99,7 +102,10 @@ export function PageEditor({
   const notices = useSaverNotices(saver, status);
   const dayClosed = useDayClosedNotice(page, today, status.locked);
   if (dayClosed) notices.push(dayClosed);
+  // Account Notices come last, in the spec's order: timezone, then verify email.
   notices.push(...accountNotices);
+  const verify = useVerifyEmailNotice(owner, emailVerified);
+  if (verify) notices.push(verify);
 
   return (
     <>
@@ -142,6 +148,45 @@ function useDayClosedNotice(
     ],
     onDismiss: () => {
       localStorage.setItem(key, "1");
+      setDismissed(true);
+    },
+  };
+}
+
+// Dismissing it lasts for this browser session: it comes back in a new one until the email is verified.
+const verifyDismissedKey = "zoop:dismissed:verifyEmail";
+
+// The verify email Notice, with Resend, until the email is verified or the Notice dismissed.
+function useVerifyEmailNotice(
+  email: string,
+  emailVerified: boolean,
+): Notice | null {
+  const [dismissed, setDismissed] = useState(
+    () => sessionStorage.getItem(verifyDismissedKey) !== null,
+  );
+  const [resend, setResend] = useState<ResendState>("idle");
+  const n = verifyEmailNotice({ email, emailVerified, dismissed, resend });
+  if (!n) return null;
+  return {
+    id: "verifyEmail",
+    text: n.text,
+    status: n.status,
+    actions: n.action
+      ? [
+          {
+            label: n.action,
+            onClick: () => {
+              setResend("sending");
+              resendVerify(email).then(
+                () => setResend("sent"),
+                () => setResend("failed"),
+              );
+            },
+          },
+        ]
+      : [],
+    onDismiss: () => {
+      sessionStorage.setItem(verifyDismissedKey, "1");
       setDismissed(true);
     },
   };

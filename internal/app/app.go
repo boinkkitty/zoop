@@ -28,7 +28,8 @@ import (
 type Deps struct {
 	DB     *pgxpool.Pool
 	Clock  clock.Clock
-	Mailer mail.Mailer    // unused until email verification (#33)
+	Mailer mail.Mailer
+	AppURL string         // where emailed links point, e.g. https://zoop.example
 	Assets fs.FS          // the built frontend; must contain index.html
 	Logs   io.Writer      // where JSON log lines go; nil discards them
 	Sentry *sentry.Client // from errreport.NewClient; nil turns reporting off
@@ -36,15 +37,11 @@ type Deps struct {
 }
 
 // Swept is how many expired rows one Sweep deleted.
-type Swept struct {
-	Sessions   int64
-	RateLimits int64
-}
+type Swept = postgres.Swept
 
-// Sweep deletes what has expired by the Clock: sessions and rate-limit rows.
+// Sweep deletes what has expired by the Clock: sessions, rate-limit rows and email tokens.
 func Sweep(ctx context.Context, d Deps) (Swept, error) {
-	sessions, rateLimits, err := postgres.SweepExpired(ctx, d.DB, d.Clock.Now(ctx))
-	return Swept{Sessions: sessions, RateLimits: rateLimits}, err
+	return postgres.SweepExpired(ctx, d.DB, d.Clock.Now(ctx))
 }
 
 // KeepSwept runs Sweep now and then every interval until ctx ends, so no separate cron is needed.
@@ -56,7 +53,7 @@ func KeepSwept(ctx context.Context, d Deps, every time.Duration) {
 		if swept, err := Sweep(ctx, d); err != nil {
 			slog.Error("sweep expired rows", "err", err)
 		} else {
-			slog.Info("swept expired rows", "sessions", swept.Sessions, "rateLimits", swept.RateLimits)
+			slog.Info("swept expired rows", "sessions", swept.Sessions, "rateLimits", swept.RateLimits, "emailTokens", swept.EmailTokens)
 		}
 		select {
 		case <-ctx.Done():
@@ -80,7 +77,10 @@ func New(d Deps) http.Handler {
 	return server.New(server.Deps{
 		Log:    logging.New(logs),
 		Sentry: d.Sentry,
-		Auth:   auth.New(postgres.NewAuthStore(d.DB), d.Clock, limits, g),
+		Auth: auth.New(auth.Deps{
+			Store: postgres.NewAuthStore(d.DB), Clock: d.Clock, Limits: limits, Google: g,
+			Mailer: d.Mailer, AppURL: d.AppURL,
+		}),
 		Pages:  pages.New(postgres.NewPageStore(d.DB), d.Clock),
 		Limits: limits,
 		Ping:   postgres.Ping(d.DB),

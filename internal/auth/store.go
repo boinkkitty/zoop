@@ -48,6 +48,33 @@ type Store interface {
 
 	// SetTimezone stores a live account's timezone and its pending switch, if any.
 	SetTimezone(ctx context.Context, id uuid.UUID, tz StoredTimezone, now time.Time) error
+
+	CreateEmailToken(ctx context.Context, userID uuid.UUID, t NewEmailToken) error
+
+	// VerifyEmail uses up the verify token for tokenHash, if it hasn't expired at now,
+	// and marks its account's email verified, all or nothing. Otherwise it returns ErrNotFound.
+	VerifyEmail(ctx context.Context, tokenHash []byte, now time.Time) error
+
+	// ResetPassword uses up the reset token for tokenHash, if it hasn't expired at now, and then,
+	// all or nothing: sets its account's password (adding a password identity if there's none),
+	// marks the email verified, and ends every session. Otherwise it returns ErrNotFound.
+	ResetPassword(ctx context.Context, tokenHash []byte, passwordHash string, now time.Time) error
+}
+
+// Purpose is what an email token is for.
+type Purpose string
+
+const (
+	PurposeVerify Purpose = "verify"
+	PurposeReset  Purpose = "reset"
+)
+
+// NewEmailToken is a one-use token to store for an emailed link. Only its hash is stored.
+type NewEmailToken struct {
+	TokenHash []byte
+	Purpose   Purpose
+	CreatedAt time.Time
+	ExpiresAt time.Time
 }
 
 // ErrNotFound is how a Store says there's no such row.

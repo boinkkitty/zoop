@@ -55,6 +55,7 @@ function JournalRoute() {
             key={`${page.day}/${page.notebook}`}
             page={page}
             owner={me.email}
+            emailVerified={me.emailVerified}
             today={me.today}
             timezone={me.timezone}
             accountNotices={timezone ? [timezone] : []}

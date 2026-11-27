@@ -137,5 +137,18 @@ export const logout = () => request<void>("POST", "/auth/logout");
 export const isUnauthenticated = (err: unknown) =>
   err instanceof ApiError && err.code === "unauthenticated";
 
+// The /verify and /reset pages POST the emailed token, so a link-scanner's GET can't use it up.
+export const verifyEmail = (token: string) =>
+  request<void>("POST", "/auth/verify", { token });
+
+// Both answer the same whether or not the email has an account.
+export const resendVerify = (email: string) =>
+  request<void>("POST", "/auth/verify/resend", { email });
+
+export const forgotPassword = (email: string) =>
+  request<void>("POST", "/auth/password/forgot", { email });
+
+export const resetPassword = (token: string, password: string) =>
+  request<void>("POST", "/auth/password/reset", { token, password });
 export const isNotFound = (err: unknown) =>
   err instanceof ApiError && err.code === "not_found";

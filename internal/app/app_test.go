@@ -23,7 +23,7 @@ const day = 24 * time.Hour
 
 var start = time.Date(2026, 11, 25, 20, 0, 0, 0, time.UTC)
 
-func TestSweepDeletesOnlyExpiredSessionsAndRateLimitRows(t *testing.T) {
+func TestSweepDeletesOnlyExpiredSessionsRateLimitsAndEmailTokens(t *testing.T) {
 	c := clock.NewFake(start)
 	deps := app.Deps{
 		DB:     testenv.Pool(t),
@@ -34,7 +34,7 @@ func TestSweepDeletesOnlyExpiredSessionsAndRateLimitRows(t *testing.T) {
 	srv := httptest.NewServer(app.New(deps))
 	t.Cleanup(srv.Close)
 
-	// A session lasting 30 days, and a signup-per-IP count kept for the hour.
+	// A session lasting 30 days, a signup-per-IP count kept for the hour, and a verify token lasting a day.
 	laptop := post(t, srv, "/api/v1/auth/signup", `{"email":"ada@example.com","password":"correct horse","timezone":"UTC"}`, "")
 	// Per-email and per-IP failure counts, kept for 15 minutes.
 	post(t, srv, "/api/v1/auth/login", `{"email":"ada@example.com","password":"wrong"}`, "")
@@ -57,6 +57,8 @@ func TestSweepDeletesOnlyExpiredSessionsAndRateLimitRows(t *testing.T) {
 	sweep(app.Swept{RateLimits: 1})
 
 	phone := post(t, srv, "/api/v1/auth/login", `{"email":"ada@example.com","password":"correct horse"}`, "")
+	c.Set(start.Add(day))
+	sweep(app.Swept{EmailTokens: 1})
 	c.Set(start.Add(30 * day))
 	sweep(app.Swept{Sessions: 1}) // the laptop's; the phone's has an hour left
 	sweep(app.Swept{})
