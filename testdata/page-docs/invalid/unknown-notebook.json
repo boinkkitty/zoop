@@ -1,0 +1,10 @@
+{
+  "notebook": "diary",
+  "doc": {
+    "type": "doc",
+    "content": [
+      { "type": "paragraph", "content": [{ "type": "text", "text": "Hi" }] }
+    ]
+  },
+  "why": "only the v1 Notebooks have a grammar"
+}

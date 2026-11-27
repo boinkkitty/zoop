@@ -1,4 +1,4 @@
-import { expect, type Page, test } from "@playwright/test";
+import { expect, type Page, test } from "./fixtures";
 
 const timezone = "Asia/Tokyo";
 test.use({ timezoneId: timezone });

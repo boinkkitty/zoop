@@ -55,6 +55,7 @@ func New(d Deps) http.Handler {
 			v1.Group(func(signedIn chi.Router) {
 				signedIn.Use(requireUser(authn, rep), limitPerUser(d.Limits, rep))
 				signedIn.Get("/me", getMe(authn, rep))
+				signedIn.Patch("/me", patchMe(authn, rep))
 				signedIn.Get("/pages/{day}/{notebook}", getPage(d.Pages, rep))
 				signedIn.Put("/pages/{day}/{notebook}", putPage(d.Pages, rep))
 				signedIn.Get("/days", getMonth(d.Pages, rep))

@@ -228,18 +228,19 @@ func (q *Queries) GetPasswordLogin(ctx context.Context, email string) (GetPasswo
 }
 
 const getUser = `-- name: GetUser :one
-SELECT email, email_verified_at, plan, first_day, timezone, next_timezone
+SELECT email, email_verified_at, plan, first_day, timezone, next_timezone, timezone_switch_day
 FROM users
 WHERE id = $1 AND deleted_at IS NULL
 `
 
 type GetUserRow struct {
-	Email           string
-	EmailVerifiedAt *time.Time
-	Plan            string
-	FirstDay        time.Time
-	Timezone        string
-	NextTimezone    *string
+	Email             string
+	EmailVerifiedAt   *time.Time
+	Plan              string
+	FirstDay          time.Time
+	Timezone          string
+	NextTimezone      *string
+	TimezoneSwitchDay *time.Time
 }
 
 func (q *Queries) GetUser(ctx context.Context, id uuid.UUID) (GetUserRow, error) {
@@ -252,6 +253,7 @@ func (q *Queries) GetUser(ctx context.Context, id uuid.UUID) (GetUserRow, error)
 		&i.FirstDay,
 		&i.Timezone,
 		&i.NextTimezone,
+		&i.TimezoneSwitchDay,
 	)
 	return i, err
 }
@@ -308,6 +310,31 @@ type RenewSessionParams struct {
 
 func (q *Queries) RenewSession(ctx context.Context, arg RenewSessionParams) error {
 	_, err := q.db.Exec(ctx, renewSession, arg.Now, arg.ExpiresAt, arg.ID)
+	return err
+}
+
+const setTimezone = `-- name: SetTimezone :exec
+UPDATE users
+SET timezone = $1, next_timezone = $2, timezone_switch_day = $3, updated_at = $4
+WHERE id = $5 AND deleted_at IS NULL
+`
+
+type SetTimezoneParams struct {
+	Timezone          string
+	NextTimezone      *string
+	TimezoneSwitchDay *time.Time
+	Now               time.Time
+	ID                uuid.UUID
+}
+
+func (q *Queries) SetTimezone(ctx context.Context, arg SetTimezoneParams) error {
+	_, err := q.db.Exec(ctx, setTimezone,
+		arg.Timezone,
+		arg.NextTimezone,
+		arg.TimezoneSwitchDay,
+		arg.Now,
+		arg.ID,
+	)
 	return err
 }
 

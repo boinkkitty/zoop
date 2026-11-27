@@ -30,7 +30,10 @@ func (s *PageStore) Writer(ctx context.Context, userID uuid.UUID) (pages.Writer,
 	if err != nil {
 		return pages.Writer{}, pageNotFound(err)
 	}
-	return pages.Writer{Plan: w.Plan, FirstDay: w.FirstDay, Timezone: w.Timezone}, nil
+	return pages.Writer{
+		Plan: w.Plan, FirstDay: w.FirstDay,
+		Timezone: w.Timezone, NextTimezone: w.NextTimezone, SwitchDay: w.TimezoneSwitchDay,
+	}, nil
 }
 
 func (s *PageStore) Page(ctx context.Context, userID uuid.UUID, notebook string, day time.Time) (pages.StoredPage, error) {

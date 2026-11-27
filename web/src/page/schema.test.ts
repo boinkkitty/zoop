@@ -17,11 +17,11 @@ function load(kind: "valid" | "invalid"): [string, Fixture][] {
 
 describe("Page document schema", () => {
   it.each(load("valid"))("accepts %s", (_, fx) => {
-    expect(parseDoc(fx.doc)).not.toBeNull();
+    expect(parseDoc(fx.notebook, fx.doc)).not.toBeNull();
   });
 
   it.each(load("invalid"))("refuses %s", (_, fx) => {
-    expect(parseDoc(fx.doc), fx.why).toBeNull();
+    expect(parseDoc(fx.notebook, fx.doc), fx.why).toBeNull();
   });
 
   it("is on the same schemaVersion as the server", () => {

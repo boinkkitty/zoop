@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgtype"
 )
 
 type AuthIdentity struct {
@@ -64,7 +63,7 @@ type User struct {
 	FirstDay          time.Time
 	Timezone          string
 	NextTimezone      *string
-	TimezoneSwitchDay pgtype.Date
+	TimezoneSwitchDay *time.Time
 	CreatedAt         time.Time
 	UpdatedAt         time.Time
 	DeletedAt         *time.Time

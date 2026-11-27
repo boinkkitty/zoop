@@ -1,0 +1,123 @@
+{
+  "notebook": "my-journal",
+  "doc": {
+    "type": "doc",
+    "content": [
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": "Packing"
+          }
+        ]
+      },
+      {
+        "type": "bulletList",
+        "content": [
+          {
+            "type": "listItem",
+            "content": [
+              {
+                "type": "paragraph",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "Clothes"
+                  }
+                ]
+              },
+              {
+                "type": "orderedList",
+                "content": [
+                  {
+                    "type": "listItem",
+                    "content": [
+                      {
+                        "type": "paragraph",
+                        "content": [
+                          {
+                            "type": "text",
+                            "text": "Socks"
+                          }
+                        ]
+                      },
+                      {
+                        "type": "taskList",
+                        "content": [
+                          {
+                            "type": "taskItem",
+                            "attrs": {
+                              "checked": true
+                            },
+                            "content": [
+                              {
+                                "type": "paragraph",
+                                "content": [
+                                  {
+                                    "type": "text",
+                                    "text": "Wool"
+                                  }
+                                ]
+                              }
+                            ]
+                          },
+                          {
+                            "type": "taskItem",
+                            "attrs": {
+                              "checked": false
+                            },
+                            "content": [
+                              {
+                                "type": "paragraph",
+                                "content": [
+                                  {
+                                    "type": "text",
+                                    "text": "Cotton"
+                                  }
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "type": "listItem",
+                    "content": [
+                      {
+                        "type": "paragraph",
+                        "content": [
+                          {
+                            "type": "text",
+                            "text": "Shirts"
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "listItem",
+            "content": [
+              {
+                "type": "paragraph",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "Books"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "plainText": "Packing\nClothes\nSocks\nWool\nCotton\nShirts\nBooks"
+}

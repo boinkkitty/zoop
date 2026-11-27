@@ -1,0 +1,21 @@
+{
+  "notebook": "my-journal",
+  "doc": {
+    "type": "doc",
+    "content": [
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": "Title"
+          }
+        ]
+      },
+      {
+        "type": "blockquote"
+      }
+    ]
+  },
+  "why": "a quote holds at least one block"
+}

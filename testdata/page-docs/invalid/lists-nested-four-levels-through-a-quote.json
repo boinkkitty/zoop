@@ -1,0 +1,102 @@
+{
+  "notebook": "my-journal",
+  "doc": {
+    "type": "doc",
+    "content": [
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": "Deep"
+          }
+        ]
+      },
+      {
+        "type": "bulletList",
+        "content": [
+          {
+            "type": "listItem",
+            "content": [
+              {
+                "type": "paragraph",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "1"
+                  }
+                ]
+              },
+              {
+                "type": "bulletList",
+                "content": [
+                  {
+                    "type": "listItem",
+                    "content": [
+                      {
+                        "type": "paragraph",
+                        "content": [
+                          {
+                            "type": "text",
+                            "text": "2"
+                          }
+                        ]
+                      },
+                      {
+                        "type": "blockquote",
+                        "content": [
+                          {
+                            "type": "orderedList",
+                            "content": [
+                              {
+                                "type": "listItem",
+                                "content": [
+                                  {
+                                    "type": "paragraph",
+                                    "content": [
+                                      {
+                                        "type": "text",
+                                        "text": "3"
+                                      }
+                                    ]
+                                  },
+                                  {
+                                    "type": "taskList",
+                                    "content": [
+                                      {
+                                        "type": "taskItem",
+                                        "attrs": {
+                                          "checked": false
+                                        },
+                                        "content": [
+                                          {
+                                            "type": "paragraph",
+                                            "content": [
+                                              {
+                                                "type": "text",
+                                                "text": "4"
+                                              }
+                                            ]
+                                          }
+                                        ]
+                                      }
+                                    ]
+                                  }
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "why": "a quote between lists doesn't reset the nesting count"
+}

@@ -79,21 +79,29 @@ func (q *Queries) GetPage(ctx context.Context, arg GetPageParams) (GetPageRow, e
 }
 
 const getWriter = `-- name: GetWriter :one
-SELECT plan, first_day, timezone
+SELECT plan, first_day, timezone, next_timezone, timezone_switch_day
 FROM users
 WHERE id = $1 AND deleted_at IS NULL
 `
 
 type GetWriterRow struct {
-	Plan     string
-	FirstDay time.Time
-	Timezone string
+	Plan              string
+	FirstDay          time.Time
+	Timezone          string
+	NextTimezone      *string
+	TimezoneSwitchDay *time.Time
 }
 
 func (q *Queries) GetWriter(ctx context.Context, id uuid.UUID) (GetWriterRow, error) {
 	row := q.db.QueryRow(ctx, getWriter, id)
 	var i GetWriterRow
-	err := row.Scan(&i.Plan, &i.FirstDay, &i.Timezone)
+	err := row.Scan(
+		&i.Plan,
+		&i.FirstDay,
+		&i.Timezone,
+		&i.NextTimezone,
+		&i.TimezoneSwitchDay,
+	)
 	return i, err
 }
 

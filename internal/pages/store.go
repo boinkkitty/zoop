@@ -52,9 +52,11 @@ type NewPage struct {
 
 // Writer is what decides which Days a user may write.
 type Writer struct {
-	Plan     string
-	FirstDay time.Time
-	Timezone string
+	Plan         string
+	FirstDay     time.Time
+	Timezone     string
+	NextTimezone *string    // a pending switch to this zone
+	SwitchDay    *time.Time // from this Day
 }
 
 type StoredPage struct {

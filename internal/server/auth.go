@@ -116,15 +116,16 @@ func limitPerUser(limits *ratelimit.RateLimiter, rep *reporter) func(http.Handle
 func userID(r *http.Request) uuid.UUID { return r.Context().Value(userKey{}).(uuid.UUID) }
 
 type meResponse struct {
-	Email           string   `json:"email"`
-	EmailVerified   bool     `json:"emailVerified"`
-	Plan            string   `json:"plan"`
-	Timezone        string   `json:"timezone"`
-	PendingTimezone *string  `json:"pendingTimezone"`
-	FirstDay        string   `json:"firstDay"`
-	Today           string   `json:"today"`
-	GraceUntil      *string  `json:"graceUntil"`
-	SignInMethods   []string `json:"signInMethods"`
+	Email             string   `json:"email"`
+	EmailVerified     bool     `json:"emailVerified"`
+	Plan              string   `json:"plan"`
+	Timezone          string   `json:"timezone"`
+	PendingTimezone   *string  `json:"pendingTimezone"`
+	TimezoneSwitchDay *string  `json:"timezoneSwitchDay"`
+	FirstDay          string   `json:"firstDay"`
+	Today             string   `json:"today"`
+	GraceUntil        *string  `json:"graceUntil"`
+	SignInMethods     []string `json:"signInMethods"`
 }
 
 func getMe(a *auth.Service, rep *reporter) http.HandlerFunc {
@@ -134,22 +135,48 @@ func getMe(a *auth.Service, rep *reporter) http.HandlerFunc {
 			writeAuthError(w, r, rep, err)
 			return
 		}
-		res := meResponse{
-			Email:           acct.Email,
-			EmailVerified:   acct.EmailVerified,
-			Plan:            acct.Plan,
-			Timezone:        acct.Timezone,
-			PendingTimezone: acct.PendingTimezone,
-			FirstDay:        days.Format(acct.FirstDay),
-			Today:           days.Format(acct.Today),
-			SignInMethods:   acct.SignInMethods,
-		}
-		if acct.GraceUntil != nil {
-			s := acct.GraceUntil.UTC().Format(time.RFC3339)
-			res.GraceUntil = &s
-		}
-		writeJSON(w, http.StatusOK, res)
+		writeJSON(w, http.StatusOK, toMe(acct))
 	}
+}
+
+// patchMe changes the timezone, from tomorrow.
+func patchMe(a *auth.Service, rep *reporter) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Timezone string `json:"timezone"`
+		}
+		if !decode(w, r, &body) {
+			return
+		}
+		acct, err := a.SetTimezone(r.Context(), userID(r), body.Timezone)
+		if err != nil {
+			writeAuthError(w, r, rep, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, toMe(acct))
+	}
+}
+
+func toMe(acct auth.Account) meResponse {
+	res := meResponse{
+		Email:           acct.Email,
+		EmailVerified:   acct.EmailVerified,
+		Plan:            acct.Plan,
+		Timezone:        acct.Timezone,
+		PendingTimezone: acct.PendingTimezone,
+		FirstDay:        days.Format(acct.FirstDay),
+		Today:           days.Format(acct.Today),
+		SignInMethods:   acct.SignInMethods,
+	}
+	if acct.SwitchDay != nil {
+		s := days.Format(*acct.SwitchDay)
+		res.TimezoneSwitchDay = &s
+	}
+	if acct.GraceUntil != nil {
+		s := acct.GraceUntil.UTC().Format(time.RFC3339)
+		res.GraceUntil = &s
+	}
+	return res
 }
 
 func setSessionCookie(w http.ResponseWriter, r *http.Request, sess auth.Session) {

@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixtures";
 
 test("the app shell loads and healthz is green", async ({ page, request }) => {
   await page.goto("/");
