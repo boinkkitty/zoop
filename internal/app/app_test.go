@@ -46,7 +46,7 @@ func TestSweepDeletesOnlyExpiredSessionsAndRateLimitRows(t *testing.T) {
 			t.Fatal(err)
 		}
 		if got != want {
-			t.Errorf("Sweep at %s = %+v, want %+v", c.Now().Sub(start), got, want)
+			t.Errorf("Sweep at %s = %+v, want %+v", c.Now(t.Context()).Sub(start), got, want)
 		}
 	}
 

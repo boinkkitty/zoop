@@ -118,6 +118,8 @@ func writePageError(w http.ResponseWriter, r *http.Request, rep *reporter, err e
 			apiError{"version_conflict", "This Page changed on another device."},
 			toPageResponse(conflict.Current),
 		})
+	case errors.Is(err, pages.ErrLocked):
+		writeError(w, http.StatusForbidden, "page_locked", "This Day is closed, so its Pages are read only.")
 	case errors.Is(err, pages.ErrClientOutdated):
 		writeError(w, http.StatusConflict, "client_outdated", "Zoop was updated. Reload to keep saving.")
 	case errors.Is(err, pages.ErrTooLong):

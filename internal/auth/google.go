@@ -94,7 +94,7 @@ func (s *Service) FinishGoogle(ctx context.Context, flow GoogleFlow, state, code
 		return Session{}, ErrGoogleUnverified
 	}
 	email := normalizeEmail(Email(who.Email))
-	now := s.clock.Now()
+	now := s.clock.Now(ctx)
 	token, first, err := newSession(now)
 	if err != nil {
 		return Session{}, err

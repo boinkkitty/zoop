@@ -75,12 +75,14 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm exec playwright install --with-deps chromium
+      # The production image, plus the test-only clock override the 02:00 lock test drives.
       # On pushes to main the build uploads the browser source maps to Sentry
       # (then deletes them, so the image never serves them). PRs build without
       # the token and upload nothing.
       - name: Build the image
         run: |
           args=(
+            --build-arg GO_TAGS=testclock
             --build-arg VITE_SENTRY_DSN="$VITE_SENTRY_DSN"
             --build-arg VITE_SENTRY_RELEASE="$GITHUB_SHA"
             --build-arg SENTRY_ORG="$SENTRY_ORG"
