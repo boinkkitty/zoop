@@ -5,6 +5,7 @@ import { EditorContent, useEditor } from "@tiptap/react";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import type { Page } from "../api";
 import { type Notice, NoticePill } from "../notices/NoticePill";
+import { editorOptions } from "./formatting";
 import styles from "./PageEditor.module.css";
 import { pageQuery } from "./queries";
 import { createPageSaver, type PageSaver, type SaverStatus } from "./saver";
@@ -45,8 +46,10 @@ export function PageEditor({ page, owner }: { page: Page; owner: string }) {
 
   const words = placeholders[page.notebook] ?? myJournal;
   const editor = useEditor({
+    ...editorOptions,
     extensions: [
       ...documentExtensions,
+      ...editorOptions.extensions,
       UndoRedo,
       Placeholder.configure({
         placeholder: ({ pos }) => (pos === 0 ? words.title : ""),
@@ -55,9 +58,6 @@ export function PageEditor({ page, owner }: { page: Page; owner: string }) {
     ],
     content: saver.restored ?? page.doc,
     editable: page.editable,
-    // Typed Markdown stays as literal characters.
-    enableInputRules: false,
-    enablePasteRules: false,
     immediatelyRender: true,
     editorProps: {
       attributes: {

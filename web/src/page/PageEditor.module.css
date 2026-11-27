@@ -26,6 +26,88 @@
   margin-bottom: 14px;
 }
 
+/* Formatting: the v1 set, kept quiet. */
+.prose mark {
+  padding: 0 1px;
+  border-radius: 3px;
+  background: #ffe866;
+  color: inherit;
+}
+
+.prose ul,
+.prose ol {
+  margin: 0;
+  padding-left: 1.5em;
+}
+
+.prose ul {
+  list-style: disc;
+}
+
+.prose ul ul {
+  list-style: circle;
+}
+
+.prose ul ul ul {
+  list-style: square;
+}
+
+.prose ol ol {
+  list-style: lower-alpha;
+}
+
+.prose ol ol ol {
+  list-style: lower-roman;
+}
+
+.prose ul:global([data-type="taskList"]) {
+  list-style: none;
+  padding-left: 0.15em;
+}
+
+.prose ul:global([data-type="taskList"]) ul:global([data-type="taskList"]) {
+  padding-left: 1.5em;
+}
+
+.prose li:global([data-checked]) {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5em;
+}
+
+.prose li:global([data-checked]) > label {
+  flex: none;
+  /* Centre the box on the first line of text (17px × 1.65). */
+  height: 1.65em;
+  display: flex;
+  align-items: center;
+  user-select: none;
+}
+
+.prose li:global([data-checked]) > label input {
+  width: 15px;
+  height: 15px;
+  margin: 0;
+  accent-color: #0a84ff;
+  cursor: pointer;
+}
+
+.prose li:global([data-checked]) > div {
+  flex: 1;
+  min-width: 0;
+}
+
+.prose li:global([data-checked="true"]) > div > p {
+  color: var(--color-faint);
+}
+
+.prose blockquote {
+  margin: 4px 0;
+  padding: 0 0 0 14px;
+  border-left: 3px solid var(--color-line);
+  color: var(--color-muted);
+}
+
 .prose p:global(.is-empty)::before {
   content: attr(data-placeholder);
   float: left;
