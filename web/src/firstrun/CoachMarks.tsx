@@ -181,5 +181,8 @@ function placeBeside(r: DOMRect, side: Mark["side"]) {
       y: Math.round(r.top + 64),
       side: s,
     };
-  return { x: clampX(r.right + GAP), y: Math.round(r.top + 8), side: s };
+  // The arrow's tip sits 24px down the mark: at the rail's first Island, or a small
+  // target's (the drawer button's) middle.
+  const y = r.top + Math.min(22, r.height / 2 - 24);
+  return { x: clampX(r.right + GAP), y: Math.round(y), side: s };
 }

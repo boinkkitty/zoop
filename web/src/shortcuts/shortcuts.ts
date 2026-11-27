@@ -67,6 +67,12 @@ export function isSheetShortcut(e: KeyboardEvent, mac = isMac()): boolean {
   return mod && !e.altKey && e.key === "/";
 }
 
+// isSearchShortcut is ⌘K (Ctrl+K off a Mac).
+export function isSearchShortcut(e: KeyboardEvent, mac = isMac()): boolean {
+  const mod = mac ? e.metaKey && !e.ctrlKey : e.ctrlKey && !e.metaKey;
+  return mod && !e.altKey && e.key.toLowerCase() === "k";
+}
+
 // isSettingsShortcut is ⌘, (Ctrl+, off a Mac).
 export function isSettingsShortcut(e: KeyboardEvent, mac = isMac()): boolean {
   const mod = mac ? e.metaKey && !e.ctrlKey : e.ctrlKey && !e.metaKey;
