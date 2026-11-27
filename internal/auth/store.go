@@ -19,10 +19,10 @@ type Store interface {
 	// and first session, all or nothing. It returns ErrEmailTaken if the email has an account.
 	CreateGoogleAccount(ctx context.Context, a NewGoogleAccount, first NewSession) (uuid.UUID, error)
 
-	// GoogleLogin finds the live account linked to a Google subject, or ErrNotFound.
-	GoogleLogin(ctx context.Context, subject string) (uuid.UUID, error)
+	// GoogleLogin finds the account linked to a Google subject, Deactivated or not, or ErrNotFound.
+	GoogleLogin(ctx context.Context, subject string) (userID uuid.UUID, deactivated bool, err error)
 
-	// UserByEmail finds the live account with this email, or ErrNotFound.
+	// UserByEmail finds the account with this email, Deactivated or not, or ErrNotFound.
 	UserByEmail(ctx context.Context, email string) (EmailOwner, error)
 
 	// LinkGoogle adds a Google identity to an account and starts a session on it, all or nothing.
@@ -30,8 +30,8 @@ type Store interface {
 	// email verified, removes the password identity and ends every other session.
 	LinkGoogle(ctx context.Context, l GoogleLink, first NewSession) error
 
-	// PasswordLogin finds the password hash for a live account's email, or ErrNotFound.
-	PasswordLogin(ctx context.Context, email string) (userID uuid.UUID, passwordHash string, err error)
+	// PasswordLogin finds the password identity for an account's email, Deactivated or not, or ErrNotFound.
+	PasswordLogin(ctx context.Context, email string) (PasswordIdentity, error)
 
 	CreateSession(ctx context.Context, userID uuid.UUID, s NewSession) error
 
@@ -59,6 +59,10 @@ type Store interface {
 	// all or nothing: sets its account's password (adding a password identity if there's none),
 	// marks the email verified, and ends every session. Otherwise it returns ErrNotFound.
 	ResetPassword(ctx context.Context, tokenHash []byte, passwordHash string, now time.Time) error
+
+	// Deactivate closes a live account at now, all or nothing: it's marked deleted and every
+	// session and email token it has is removed. It returns the account's email, or ErrNotFound.
+	Deactivate(ctx context.Context, id uuid.UUID, now time.Time) (email string, err error)
 }
 
 // Purpose is what an email token is for.
@@ -98,10 +102,18 @@ type NewGoogleAccount struct {
 	CreatedAt time.Time
 }
 
+// PasswordIdentity is an account's password, and whether the account was deactivated.
+type PasswordIdentity struct {
+	UserID       uuid.UUID
+	PasswordHash string
+	Deactivated  bool
+}
+
 // EmailOwner is the account that holds an email.
 type EmailOwner struct {
 	UserID        uuid.UUID
 	EmailVerified bool
+	Deactivated   bool
 }
 
 // GoogleLink links a Google subject to an existing account.

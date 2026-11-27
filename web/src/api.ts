@@ -130,9 +130,14 @@ export const googleErrors: Record<string, string> = {
   google_unavailable:
     "Google sign-in isn't available right now. Use your email and password.",
   google_failed: "Google sign-in didn't finish. Please try again.",
+  account_deactivated: "This account was deactivated.",
 };
 
 export const logout = () => request<void>("POST", "/auth/logout");
+
+// deactivate closes the account for good, confirmed by typing its email, and signs this device out.
+export const deactivate = (email: string) =>
+  request<void>("DELETE", "/me", { email });
 
 export const isUnauthenticated = (err: unknown) =>
   err instanceof ApiError && err.code === "unauthenticated";

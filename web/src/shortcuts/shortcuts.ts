@@ -37,6 +37,7 @@ export const shortcutGroups: ShortcutGroup[] = [
     shortcuts: [
       { label: "Paste as plain text", keys: ["Mod", "Shift", "V"] },
       { label: "Show these shortcuts", keys: ["Mod", "/"] },
+      { label: "Open Settings", keys: ["Mod", ","] },
     ],
   },
 ];
@@ -63,4 +64,10 @@ export function keyLabels(keys: string[], mac = isMac()): string[] {
 export function isSheetShortcut(e: KeyboardEvent, mac = isMac()): boolean {
   const mod = mac ? e.metaKey && !e.ctrlKey : e.ctrlKey && !e.metaKey;
   return mod && !e.altKey && e.key === "/";
+}
+
+// isSettingsShortcut is ⌘, (Ctrl+, off a Mac).
+export function isSettingsShortcut(e: KeyboardEvent, mac = isMac()): boolean {
+  const mod = mac ? e.metaKey && !e.ctrlKey : e.ctrlKey && !e.metaKey;
+  return mod && !e.altKey && !e.shiftKey && e.key === ",";
 }

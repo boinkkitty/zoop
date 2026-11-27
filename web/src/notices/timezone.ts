@@ -47,5 +47,5 @@ function kept(storage: Storage, zone: string) {
 }
 
 // placeName is the city of an IANA zone: "America/Argentina/Buenos_Aires" → "Buenos Aires".
-const placeName = (zone: string) =>
+export const placeName = (zone: string) =>
   (zone.split("/").pop() ?? zone).replaceAll("_", " ");
