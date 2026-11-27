@@ -184,3 +184,27 @@ test("yesterday's Island shows the Grace Window, and the marker goes at 02:00", 
   await expect(yesterday.getByTitle("Still open")).toHaveCount(0);
   await expect(yesterday.getByText(/Still open until/)).toHaveCount(0);
 });
+
+test("the selected Island's ring isn't covered by the month header or crowded by the scrubber", async ({
+  page,
+  context,
+  baseURL,
+}) => {
+  await needsTestClock(page);
+  const day = signupDay(9);
+  await serverNow(context, baseURL ?? "", at(day, "12:00:00"));
+  await signUp(page, day);
+
+  const selected = island(page, day);
+  await expect(selected).toHaveAttribute("aria-current", "date");
+  const header = page.getByRole("heading", { level: 2 }).first();
+  await expect(page.getByTestId("scrubber")).toBeVisible();
+  const ring = 4; // outline 2px + outline-offset 2px
+  const s = await selected.boundingBox();
+  const h = await header.boundingBox();
+  const scrub = await page.getByTestId("scrubber").boundingBox();
+  if (!s || !h || !scrub) throw new Error("rail not laid out");
+  // The sticky header is opaque: it must end above the ring, or it paints over its top edge.
+  expect(h.y + h.height).toBeLessThanOrEqual(s.y - ring);
+  expect(s.x + s.width + ring).toBeLessThan(scrub.x);
+});
