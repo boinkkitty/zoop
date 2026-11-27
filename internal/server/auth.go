@@ -5,13 +5,16 @@ import (
 	"encoding/json"
 	"errors"
 	"log/slog"
+	"net"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
 
 	"github.com/boinkkitty/zoop/internal/auth"
 	"github.com/boinkkitty/zoop/internal/days"
+	"github.com/boinkkitty/zoop/internal/ratelimit"
 )
 
 const sessionCookie = "zoop_session"
@@ -28,7 +31,7 @@ func signup(a *auth.Service) http.HandlerFunc {
 		if !decode(w, r, &c) {
 			return
 		}
-		sess, err := a.Signup(r.Context(), c.Email, c.Password, c.Timezone)
+		sess, err := a.Signup(r.Context(), c.Email, c.Password, c.Timezone, clientIP(r))
 		if err != nil {
 			writeAuthError(w, err)
 			return
@@ -44,7 +47,7 @@ func login(a *auth.Service) http.HandlerFunc {
 		if !decode(w, r, &c) {
 			return
 		}
-		sess, err := a.Login(r.Context(), c.Email, c.Password)
+		sess, err := a.Login(r.Context(), c.Email, c.Password, clientIP(r))
 		if err != nil {
 			writeAuthError(w, err)
 			return
@@ -91,6 +94,19 @@ func requireUser(a *auth.Service) func(http.Handler) http.Handler {
 				setSessionCookie(w, r, sess)
 			}
 			next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), userKey{}, sess.UserID)))
+		})
+	}
+}
+
+// limitPerUser slows down a runaway client or script, across all of the user's devices. It runs after requireUser.
+func limitPerUser(limits *ratelimit.RateLimiter) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if err := limits.Take(r.Context(), ratelimit.APIRequestsPerUser, userID(r).String()); err != nil {
+				writeAuthError(w, err)
+				return
+			}
+			next.ServeHTTP(w, r)
 		})
 	}
 }
@@ -146,6 +162,22 @@ func setSessionCookie(w http.ResponseWriter, r *http.Request, sess auth.Session)
 	})
 }
 
+// clientIP is the visitor's address as Railway's proxy reports it, or the peer's without a proxy.
+// It trusts one hop: the proxy appends the address it saw, and anything before that is the client's say-so.
+func clientIP(r *http.Request) string {
+	if fwd := r.Header.Values("X-Forwarded-For"); len(fwd) > 0 {
+		hops := strings.Split(fwd[len(fwd)-1], ",")
+		if last := strings.TrimSpace(hops[len(hops)-1]); last != "" {
+			return last
+		}
+	}
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		return r.RemoteAddr
+	}
+	return host
+}
+
 // isHTTPS is true behind Railway's TLS-terminating proxy, and false for local http.
 func isHTTPS(r *http.Request) bool {
 	return r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https"
@@ -153,7 +185,10 @@ func isHTTPS(r *http.Request) bool {
 
 func writeAuthError(w http.ResponseWriter, err error) {
 	var v *auth.ValidationError
+	var limited *ratelimit.ExceededError
 	switch {
+	case errors.As(err, &limited):
+		writeRateLimited(w, limited)
 	case errors.As(err, &v):
 		writeError(w, http.StatusBadRequest, "validation", v.Message)
 	case errors.Is(err, auth.ErrEmailTaken):

@@ -83,6 +83,21 @@ export const signup = (email: string, password: string) =>
 export const login = (email: string, password: string) =>
   request<void>("POST", "/auth/login", { email, password });
 
+// A full-page navigation: the server sends the browser on to Google and back.
+export const googleStartURL = () =>
+  `/api/v1/auth/google/start?timezone=${encodeURIComponent(
+    Intl.DateTimeFormat().resolvedOptions().timeZone,
+  )}`;
+
+// Why the Google callback sent the browser back to sign in (?error=).
+export const googleErrors: Record<string, string> = {
+  google_unverified:
+    "Google hasn't verified the email on that account, so it can't be used to sign in.",
+  google_unavailable:
+    "Google sign-in isn't available right now. Use your email and password.",
+  google_failed: "Google sign-in didn't finish. Please try again.",
+};
+
 export const logout = () => request<void>("POST", "/auth/logout");
 
 export const isUnauthenticated = (err: unknown) =>

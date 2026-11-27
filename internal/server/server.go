@@ -14,12 +14,14 @@ import (
 
 	"github.com/boinkkitty/zoop/internal/auth"
 	"github.com/boinkkitty/zoop/internal/pages"
+	"github.com/boinkkitty/zoop/internal/ratelimit"
 )
 
 // Deps is what the router drives. internal/app builds it.
 type Deps struct {
 	Auth   *auth.Service
 	Pages  *pages.Service
+	Limits *ratelimit.RateLimiter
 	Ping   func(context.Context) error // backs /api/healthz
 	Assets fs.FS                       // the built frontend; must contain index.html
 }
@@ -34,8 +36,10 @@ func New(d Deps) http.Handler {
 			v1.Post("/auth/signup", signup(authn))
 			v1.Post("/auth/login", login(authn))
 			v1.Post("/auth/logout", logout(authn))
+			v1.Get("/auth/google/start", googleStart(authn))
+			v1.Get("/auth/google/callback", googleCallback(authn))
 			v1.Group(func(signedIn chi.Router) {
-				signedIn.Use(requireUser(authn))
+				signedIn.Use(requireUser(authn), limitPerUser(d.Limits))
 				signedIn.Get("/me", getMe(authn))
 				signedIn.Get("/pages/{day}/{notebook}", getPage(d.Pages))
 				signedIn.Put("/pages/{day}/{notebook}", putPage(d.Pages))

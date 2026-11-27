@@ -17,6 +17,7 @@ import (
 	"github.com/boinkkitty/zoop/internal/auth/password"
 	"github.com/boinkkitty/zoop/internal/clock"
 	"github.com/boinkkitty/zoop/internal/days"
+	"github.com/boinkkitty/zoop/internal/ratelimit"
 )
 
 const (
@@ -37,14 +38,18 @@ type ValidationError struct{ Message string }
 
 func (e *ValidationError) Error() string { return e.Message }
 
-// Service is the auth module. It persists through its Store and tells time by its Clock.
+// Service is the auth module. It persists through its Store, tells time by its Clock,
+// slows down guessing with its RateLimiter, and signs people in with Google through
+// its GoogleProvider (nil if not configured).
 type Service struct {
-	store Store
-	clock clock.Clock
+	store  Store
+	clock  clock.Clock
+	limits *ratelimit.RateLimiter
+	google GoogleProvider
 }
 
-func New(store Store, c clock.Clock) *Service {
-	return &Service{store: store, clock: c}
+func New(store Store, c clock.Clock, limits *ratelimit.RateLimiter, google GoogleProvider) *Service {
+	return &Service{store: store, clock: c, limits: limits, google: google}
 }
 
 // Session is a signed-in device.
@@ -56,7 +61,11 @@ type Session struct {
 }
 
 // Signup creates a user with a password identity, their first Day being today in timezone, and signs them in.
-func (s *Service) Signup(ctx context.Context, email, plain, timezone string) (Session, error) {
+// Every attempt counts toward SignupsPerIP, so one address can't farm accounts.
+func (s *Service) Signup(ctx context.Context, email, plain, timezone, clientIP string) (Session, error) {
+	if err := s.limits.Take(ctx, ratelimit.SignupsPerIP, clientIP); err != nil {
+		return Session{}, err
+	}
 	email = normalizeEmail(email)
 	if err := validateEmail(email); err != nil {
 		return Session{}, err
@@ -88,11 +97,32 @@ func (s *Service) Signup(ctx context.Context, email, plain, timezone string) (Se
 
 // Login signs a new device in with an email and password.
 // Every failure is ErrBadLogin, so it doesn't reveal which emails have accounts.
-func (s *Service) Login(ctx context.Context, email, plain string) (Session, error) {
+// Too many failures return a ratelimit.ExceededError until the window ends, even for the right password.
+func (s *Service) Login(ctx context.Context, email, plain, clientIP string) (Session, error) {
+	email = normalizeEmail(email)
+	if err := s.limits.Check(ctx, ratelimit.LoginFailuresPerEmail, email); err != nil {
+		return Session{}, err
+	}
+	if err := s.limits.Check(ctx, ratelimit.LoginFailuresPerIP, clientIP); err != nil {
+		return Session{}, err
+	}
+	sess, err := s.login(ctx, email, plain)
+	if errors.Is(err, ErrBadLogin) {
+		if err := s.limits.Record(ctx, ratelimit.LoginFailuresPerEmail, email); err != nil {
+			return Session{}, err
+		}
+		if err := s.limits.Record(ctx, ratelimit.LoginFailuresPerIP, clientIP); err != nil {
+			return Session{}, err
+		}
+	}
+	return sess, err
+}
+
+func (s *Service) login(ctx context.Context, email, plain string) (Session, error) {
 	if len(plain) > password.MaxBytes {
 		return Session{}, ErrBadLogin
 	}
-	userID, hash, err := s.store.PasswordLogin(ctx, normalizeEmail(email))
+	userID, hash, err := s.store.PasswordLogin(ctx, email)
 	if errors.Is(err, ErrNotFound) {
 		// Spend the same time as a real check, so timing doesn't reveal it either.
 		_, _ = password.Verify(dummyHash, plain)
@@ -108,6 +138,11 @@ func (s *Service) Login(ctx context.Context, email, plain string) (Session, erro
 	if !ok {
 		return Session{}, ErrBadLogin
 	}
+	return s.signIn(ctx, userID)
+}
+
+// signIn starts a new session for an existing account.
+func (s *Service) signIn(ctx context.Context, userID uuid.UUID) (Session, error) {
 	token, sess, err := newSession(s.clock.Now(ctx))
 	if err != nil {
 		return Session{}, err
