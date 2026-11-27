@@ -9,8 +9,7 @@
     "build:bin": "pnpm build && go build -o bin/zoop ./cmd/zoop",
     "lint": "biome check .",
     "test": "vitest run",
-    "e2e": "playwright test",
-    "migrate": "go run ./cmd/migrate"
+    "e2e": "playwright test"
   },
   "dependencies": {
     "react": "^19.3.1",

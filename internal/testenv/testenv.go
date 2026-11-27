@@ -1,4 +1,5 @@
-// Package testenv gives each Go test package its own freshly migrated Postgres database.
+// Package testenv gives each Go test package its own fresh Postgres database with
+// every file in internal/db/migrations applied, in filename order.
 //
 // Use it from TestMain:
 //
@@ -13,8 +14,10 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
+	"io/fs"
 	"net/url"
 	"os"
+	"sort"
 	"testing"
 
 	"github.com/jackc/pgx/v5"
@@ -30,7 +33,7 @@ var (
 	poolURL string
 )
 
-// Run creates a database for this test package, migrates it, runs the tests, then drops it.
+// Run creates a database for this test package, applies the schema, runs the tests, then drops it.
 func Run(m *testing.M) {
 	os.Exit(run(m))
 }
@@ -66,14 +69,36 @@ func run(m *testing.M) int {
 	}
 	defer pool.Close()
 
-	if err := db.Migrate(ctx, pool); err != nil {
-		fmt.Fprintf(os.Stderr, "testenv: migrate: %v\n", err)
+	if err := applySchema(ctx, pool); err != nil {
+		fmt.Fprintf(os.Stderr, "testenv: apply schema: %v\n", err)
 		return 1
 	}
 	return m.Run()
 }
 
-// Pool returns this package's migrated database. It fails the test if Run wasn't used.
+// applySchema runs each migration file in its own transaction, the way `psql -1 -f` would.
+func applySchema(ctx context.Context, pool *pgxpool.Pool) error {
+	files, err := fs.Glob(db.Migrations(), "*.sql")
+	if err != nil {
+		return err
+	}
+	sort.Strings(files)
+	for _, name := range files {
+		sql, err := fs.ReadFile(db.Migrations(), name)
+		if err != nil {
+			return err
+		}
+		if err := pgx.BeginFunc(ctx, pool, func(tx pgx.Tx) error {
+			_, err := tx.Exec(ctx, string(sql))
+			return err
+		}); err != nil {
+			return fmt.Errorf("%s: %w", name, err)
+		}
+	}
+	return nil
+}
+
+// Pool returns this package's database. It fails the test if Run wasn't used.
 func Pool(t testing.TB) *pgxpool.Pool {
 	t.Helper()
 	if pool == nil {

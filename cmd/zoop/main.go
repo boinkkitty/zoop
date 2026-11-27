@@ -1,5 +1,5 @@
 // Command zoop is the whole app: the JSON API and the built frontend, from one origin.
-// It does not migrate the database; run cmd/migrate first.
+// It never changes the schema: apply internal/db/migrations by hand with psql first.
 package main
 
 import (
