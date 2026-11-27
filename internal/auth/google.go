@@ -93,7 +93,7 @@ func (s *Service) FinishGoogle(ctx context.Context, flow GoogleFlow, state, code
 	if !who.EmailVerified {
 		return Session{}, ErrGoogleUnverified
 	}
-	email := normalizeEmail(who.Email)
+	email := normalizeEmail(Email(who.Email))
 	now := s.clock.Now(ctx)
 	token, first, err := newSession(now)
 	if err != nil {
@@ -105,7 +105,7 @@ func (s *Service) FinishGoogle(ctx context.Context, flow GoogleFlow, state, code
 
 	// Google vouches for the email, so whoever holds it here may sign in with Google.
 	// If it was never verified here, the password on it may be a pre-registrant's: it goes.
-	owner, err := s.store.UserByEmail(ctx, email)
+	owner, err := s.store.UserByEmail(ctx, string(email))
 	if err == nil {
 		link := GoogleLink{UserID: owner.UserID, Subject: who.Subject, TakeOver: !owner.EmailVerified, Now: now}
 		if err := s.store.LinkGoogle(ctx, link, first); err != nil {
@@ -122,7 +122,7 @@ func (s *Service) FinishGoogle(ctx context.Context, flow GoogleFlow, state, code
 		return Session{}, err
 	}
 	userID, err = s.store.CreateGoogleAccount(ctx, NewGoogleAccount{
-		Email: email, Subject: who.Subject,
+		Email: string(email), Subject: who.Subject,
 		FirstDay: days.Today(now, loc), Timezone: flow.Timezone, CreatedAt: now,
 	}, first)
 	if err != nil {

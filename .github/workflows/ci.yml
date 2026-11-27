@@ -76,8 +76,27 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm exec playwright install --with-deps chromium
       # The production image, plus the test-only clock override the 02:00 lock test drives.
+      # On pushes to main the build uploads the browser source maps to Sentry
+      # (then deletes them, so the image never serves them). PRs build without
+      # the token and upload nothing.
       - name: Build the image
-        run: docker build --build-arg GO_TAGS=testclock -t zoop:ci .
+        run: |
+          args=(
+            --build-arg GO_TAGS=testclock
+            --build-arg VITE_SENTRY_DSN="$VITE_SENTRY_DSN"
+            --build-arg VITE_SENTRY_RELEASE="$GITHUB_SHA"
+            --build-arg SENTRY_ORG="$SENTRY_ORG"
+            --build-arg SENTRY_PROJECT="$SENTRY_PROJECT"
+          )
+          if [[ "$GITHUB_EVENT_NAME" == push && -n "$SENTRY_AUTH_TOKEN" ]]; then
+            args+=(--secret id=sentry_auth_token,env=SENTRY_AUTH_TOKEN)
+          fi
+          docker build "${args[@]}" -t zoop:ci .
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: ${{ vars.SENTRY_ORG }}
+          SENTRY_PROJECT: ${{ vars.SENTRY_PROJECT }}
+          VITE_SENTRY_DSN: ${{ vars.VITE_SENTRY_DSN }}
       # The auth tests need the schema. Apply it to this throwaway database with
       # psql, file by file, exactly as it's done by hand. The app never migrates.
       - name: Apply the schema by hand

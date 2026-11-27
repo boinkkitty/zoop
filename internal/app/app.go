@@ -4,16 +4,19 @@ package app
 
 import (
 	"context"
+	"io"
 	"io/fs"
 	"log/slog"
 	"net/http"
 	"time"
 
+	"github.com/getsentry/sentry-go"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/boinkkitty/zoop/internal/auth"
 	"github.com/boinkkitty/zoop/internal/clock"
 	"github.com/boinkkitty/zoop/internal/google"
+	"github.com/boinkkitty/zoop/internal/logging"
 	"github.com/boinkkitty/zoop/internal/mail"
 	"github.com/boinkkitty/zoop/internal/pages"
 	"github.com/boinkkitty/zoop/internal/postgres"
@@ -27,6 +30,8 @@ type Deps struct {
 	Clock  clock.Clock
 	Mailer mail.Mailer    // unused until email verification (#33)
 	Assets fs.FS          // the built frontend; must contain index.html
+	Logs   io.Writer      // where JSON log lines go; nil discards them
+	Sentry *sentry.Client // from errreport.NewClient; nil turns reporting off
 	Google *google.Config // nil when Google sign-in isn't configured
 }
 
@@ -67,8 +72,14 @@ func New(d Deps) http.Handler {
 	if d.Google != nil {
 		g = google.New(*d.Google, d.Clock)
 	}
+	logs := d.Logs
+	if logs == nil {
+		logs = io.Discard
+	}
 	limits := ratelimit.New(postgres.NewRateLimitStore(d.DB), d.Clock)
 	return server.New(server.Deps{
+		Log:    logging.New(logs),
+		Sentry: d.Sentry,
 		Auth:   auth.New(postgres.NewAuthStore(d.DB), d.Clock, limits, g),
 		Pages:  pages.New(postgres.NewPageStore(d.DB), d.Clock),
 		Limits: limits,

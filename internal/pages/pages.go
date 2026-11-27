@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"time"
 	"unicode/utf8"
 
@@ -14,6 +15,12 @@ import (
 	"github.com/boinkkitty/zoop/internal/clock"
 	"github.com/boinkkitty/zoop/internal/days"
 )
+
+// Content is a Page's document as stored (TipTap JSON, ADR 0001). It's the
+// most private thing Zoop holds, so it never appears in logs.
+type Content string
+
+func (Content) LogValue() slog.Value { return slog.StringValue("[redacted]") }
 
 // Notebooks are the v1 Notebooks, by slug.
 var Notebooks = []string{"my-journal", "i-learned"}

@@ -18,7 +18,9 @@ import (
 
 	"github.com/boinkkitty/zoop/internal/app"
 	"github.com/boinkkitty/zoop/internal/clock"
+	"github.com/boinkkitty/zoop/internal/errreport"
 	"github.com/boinkkitty/zoop/internal/google"
+	"github.com/boinkkitty/zoop/internal/logging"
 	"github.com/boinkkitty/zoop/internal/mail"
 	"github.com/boinkkitty/zoop/web"
 )
@@ -27,6 +29,7 @@ import (
 const sweepEvery = 15 * time.Minute
 
 func main() {
+	slog.SetDefault(logging.New(os.Stdout))
 	if err := run(); err != nil {
 		slog.Error("zoop exited", "err", err)
 		os.Exit(1)
@@ -46,6 +49,17 @@ func run() error {
 		port = "8080"
 	}
 
+	// Error reporting is off unless SENTRY_DSN is set.
+	reports, err := errreport.NewClient(errreport.Options{
+		DSN:         os.Getenv("SENTRY_DSN"),
+		Release:     os.Getenv("SENTRY_RELEASE"),
+		Environment: os.Getenv("SENTRY_ENVIRONMENT"),
+	})
+	if err != nil {
+		return fmt.Errorf("set up Sentry: %w", err)
+	}
+	defer reports.Flush(2 * time.Second)
+
 	googleCfg, err := googleConfig()
 	if err != nil {
 		return err
@@ -64,6 +78,8 @@ func run() error {
 		Mailer: mail.Unconfigured{},
 		Assets: web.Dist(),
 		Google: googleCfg,
+		Logs:   os.Stdout,
+		Sentry: reports,
 	}
 	go app.KeepSwept(ctx, deps, sweepEvery)
 
@@ -75,7 +91,7 @@ func run() error {
 
 	errc := make(chan error, 1)
 	go func() {
-		slog.Info("zoop listening", "port", port)
+		slog.Info("zoop listening on :" + port)
 		errc <- srv.ListenAndServe()
 	}()
 
