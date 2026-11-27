@@ -12,12 +12,13 @@ import (
 	"os/signal"
 	"syscall"
 	"time"
+	_ "time/tzdata" // signup validates IANA zones; don't depend on the image having them
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/boinkkitty/zoop/internal/app"
 	"github.com/boinkkitty/zoop/internal/clock"
 	"github.com/boinkkitty/zoop/internal/mail"
-	"github.com/boinkkitty/zoop/internal/server"
 	"github.com/boinkkitty/zoop/web"
 )
 
@@ -49,7 +50,7 @@ func run() error {
 
 	srv := &http.Server{
 		Addr: ":" + port,
-		Handler: server.New(server.Deps{
+		Handler: app.New(app.Deps{
 			DB:     pool,
 			Clock:  clock.System{},
 			Mailer: mail.Unconfigured{},

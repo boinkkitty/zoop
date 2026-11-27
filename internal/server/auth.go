@@ -1,0 +1,178 @@
+package server
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"log/slog"
+	"net/http"
+	"time"
+
+	"github.com/google/uuid"
+
+	"github.com/boinkkitty/zoop/internal/auth"
+	"github.com/boinkkitty/zoop/internal/days"
+)
+
+const sessionCookie = "zoop_session"
+
+type credentials struct {
+	Email    string `json:"email"`
+	Password string `json:"password"`
+	Timezone string `json:"timezone"`
+}
+
+func signup(a *auth.Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var c credentials
+		if !decode(w, r, &c) {
+			return
+		}
+		sess, err := a.Signup(r.Context(), c.Email, c.Password, c.Timezone)
+		if err != nil {
+			writeAuthError(w, err)
+			return
+		}
+		setSessionCookie(w, r, sess)
+		w.WriteHeader(http.StatusCreated)
+	}
+}
+
+func login(a *auth.Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var c credentials
+		if !decode(w, r, &c) {
+			return
+		}
+		sess, err := a.Login(r.Context(), c.Email, c.Password)
+		if err != nil {
+			writeAuthError(w, err)
+			return
+		}
+		setSessionCookie(w, r, sess)
+		w.WriteHeader(http.StatusOK)
+	}
+}
+
+// logout signs out this device: the session is deleted and the cookie cleared.
+func logout(a *auth.Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if c, err := r.Cookie(sessionCookie); err == nil {
+			if err := a.Logout(r.Context(), c.Value); err != nil {
+				writeAuthError(w, err)
+				return
+			}
+		}
+		http.SetCookie(w, &http.Cookie{
+			Name: sessionCookie, Path: "/", MaxAge: -1,
+			HttpOnly: true, Secure: isHTTPS(r), SameSite: http.SameSiteLaxMode,
+		})
+		w.WriteHeader(http.StatusNoContent)
+	}
+}
+
+type userKey struct{}
+
+// requireUser lets the request through only with a live session, renewing its cookie when the expiry moves.
+func requireUser(a *auth.Service) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			var token string
+			if c, err := r.Cookie(sessionCookie); err == nil {
+				token = c.Value
+			}
+			sess, err := a.Authenticate(r.Context(), token)
+			if err != nil {
+				writeAuthError(w, err)
+				return
+			}
+			if sess.Renewed {
+				sess.Token = token
+				setSessionCookie(w, r, sess)
+			}
+			next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), userKey{}, sess.UserID)))
+		})
+	}
+}
+
+func userID(r *http.Request) uuid.UUID { return r.Context().Value(userKey{}).(uuid.UUID) }
+
+type meResponse struct {
+	Email           string   `json:"email"`
+	EmailVerified   bool     `json:"emailVerified"`
+	Plan            string   `json:"plan"`
+	Timezone        string   `json:"timezone"`
+	PendingTimezone *string  `json:"pendingTimezone"`
+	FirstDay        string   `json:"firstDay"`
+	Today           string   `json:"today"`
+	GraceUntil      *string  `json:"graceUntil"`
+	SignInMethods   []string `json:"signInMethods"`
+}
+
+func getMe(a *auth.Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		acct, err := a.Account(r.Context(), userID(r))
+		if err != nil {
+			writeAuthError(w, err)
+			return
+		}
+		res := meResponse{
+			Email:           acct.Email,
+			EmailVerified:   acct.EmailVerified,
+			Plan:            acct.Plan,
+			Timezone:        acct.Timezone,
+			PendingTimezone: acct.PendingTimezone,
+			FirstDay:        days.Format(acct.FirstDay),
+			Today:           days.Format(acct.Today),
+			SignInMethods:   acct.SignInMethods,
+		}
+		if acct.GraceUntil != nil {
+			s := acct.GraceUntil.UTC().Format(time.RFC3339)
+			res.GraceUntil = &s
+		}
+		writeJSON(w, http.StatusOK, res)
+	}
+}
+
+func setSessionCookie(w http.ResponseWriter, r *http.Request, sess auth.Session) {
+	http.SetCookie(w, &http.Cookie{
+		Name:     sessionCookie,
+		Value:    sess.Token,
+		Path:     "/",
+		Expires:  sess.ExpiresAt,
+		HttpOnly: true,
+		Secure:   isHTTPS(r),
+		SameSite: http.SameSiteLaxMode,
+	})
+}
+
+// isHTTPS is true behind Railway's TLS-terminating proxy, and false for local http.
+func isHTTPS(r *http.Request) bool {
+	return r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https"
+}
+
+func writeAuthError(w http.ResponseWriter, err error) {
+	var v *auth.ValidationError
+	switch {
+	case errors.As(err, &v):
+		writeError(w, http.StatusBadRequest, "validation", v.Message)
+	case errors.Is(err, auth.ErrEmailTaken):
+		writeError(w, http.StatusConflict, "email_taken", "That email already has an account. Sign in instead.")
+	case errors.Is(err, auth.ErrBadLogin):
+		writeError(w, http.StatusUnauthorized, "unauthenticated", "Wrong email or password.")
+	case errors.Is(err, auth.ErrNoSession):
+		writeError(w, http.StatusUnauthorized, "unauthenticated", "Please sign in.")
+	default:
+		slog.Error("auth request failed", "err", err)
+		writeError(w, http.StatusInternalServerError, "internal", "Something went wrong.")
+	}
+}
+
+func decode(w http.ResponseWriter, r *http.Request, v any) bool {
+	r.Body = http.MaxBytesReader(w, r.Body, 16<<10)
+	if err := json.NewDecoder(r.Body).Decode(v); err != nil {
+		writeError(w, http.StatusBadRequest, "validation", "The request body isn't valid JSON.")
+		return false
+	}
+	return true
+}
