@@ -17,9 +17,11 @@ async function request<T>(
   method: string,
   path: string,
   body?: unknown,
+  signal?: AbortSignal,
 ): Promise<T> {
   const res = await fetch(`/api/v1${path}`, {
     method,
+    signal,
     credentials: "same-origin",
     headers:
       body === undefined ? undefined : { "Content-Type": "application/json" },
@@ -106,6 +108,35 @@ export type DaysSummary = {
 
 export const getDaysSummary = () =>
   request<DaysSummary>("GET", "/days/summary");
+
+// A run of a search snippet, marked if it matched. Snippets are plain text, never HTML.
+export type Segment = { text: string; match: boolean };
+
+// One matching Page. The Title is empty for I Learned.
+export type SearchResult = {
+  day: string;
+  notebook: Notebook;
+  title: string;
+  snippet: Segment[];
+};
+
+// A page of results, newest Day first; nextCursor is null once that's every match.
+export type SearchResults = {
+  results: SearchResult[];
+  nextCursor: string | null;
+};
+
+export const search = (
+  q: string,
+  cursor: string | null,
+  signal?: AbortSignal,
+) =>
+  request<SearchResults>(
+    "GET",
+    `/search?${new URLSearchParams(cursor ? { q, cursor } : { q })}`,
+    undefined,
+    signal,
+  );
 
 export const signup = (email: string, password: string) =>
   request<void>("POST", "/auth/signup", {

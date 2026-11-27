@@ -27,6 +27,16 @@ function JournalRoute() {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const timezone = useTimezoneNotice(me);
+  // The query a search result was opened with, kept until the user moves on from its matches.
+  const [opened, setOpened] = useState<{
+    day: string;
+    notebook: string;
+    q: string;
+  } | null>(null);
+  const searchQuery =
+    opened && opened.day === day && opened.notebook === notebook
+      ? opened.q
+      : null;
 
   const signOut = useMutation({
     mutationFn: logout,
@@ -38,7 +48,18 @@ function JournalRoute() {
 
   return (
     <div className={styles.app}>
-      <Sidebar me={me} day={day} notebook={notebook} />
+      <Sidebar
+        me={me}
+        day={day}
+        notebook={notebook}
+        onOpenResult={(r, q) => {
+          setOpened({ day: r.day, notebook: r.notebook, q });
+          void navigate({
+            to: "/day/$day/$notebook",
+            params: { day: r.day, notebook: r.notebook },
+          });
+        }}
+      />
       <main className={styles.desk}>
         <header className={styles.bar}>
           <span>{me.email}</span>
@@ -59,6 +80,8 @@ function JournalRoute() {
             today={me.today}
             timezone={me.timezone}
             accountNotices={timezone ? [timezone] : []}
+            searchQuery={searchQuery}
+            onClearSearch={() => setOpened(null)}
           />
           <NotebookIndex day={page.day} active={page.notebook} />
         </article>

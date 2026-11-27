@@ -8,7 +8,12 @@ import {
   useRef,
   useState,
 } from "react";
-import type { Me } from "../api";
+import type { Me, SearchResult } from "../api";
+import { useSearch } from "../search/queries";
+import { moveActive } from "../search/results";
+import search from "../search/Search.module.css";
+import { SearchResults } from "../search/SearchResults";
+import { isMac } from "../shortcuts/shortcuts";
 import { Island } from "./Island";
 import { railQuery, summaryQuery } from "./queries";
 import styles from "./Rail.module.css";
@@ -22,17 +27,32 @@ const monthName = new Intl.DateTimeFormat("en-GB", {
 const monthLabel = (month: string) =>
   monthName.format(new Date(`${month}-01T00:00:00Z`));
 
-// The left sidebar: Today, a divider, and the Island rail with its scrubber.
+// The left sidebar: Today, search, a divider, and the Island rail with its scrubber.
+// While there's a query, search results take the rail's place.
 export function Sidebar({
   me,
   day,
   notebook,
+  onOpenResult,
 }: {
   me: Me;
   day: string;
   notebook: string;
+  onOpenResult: (r: SearchResult, q: string) => void;
 }) {
   const navigate = useNavigate();
+  const [q, setQ] = useState("");
+  const found = useSearch(q);
+  const [active, setActive] = useState(0);
+  // The result last opened from search: it keeps a bar while its Page is open.
+  const [opened, setOpened] = useState<string | null>(null);
+  const searching = q.trim() !== "";
+  const box = useRef<HTMLInputElement>(null);
+  // A new query's results start with the first one active.
+  const resultsFor = found.stale ? null : found.settled;
+  useEffect(() => {
+    if (resultsFor !== null) setActive(0);
+  }, [resultsFor]);
   const thisMonth = me.today.slice(0, 7);
   // The month the rail starts from: today's, or the one the scrubber jumped to.
   const [anchor, setAnchor] = useState(thisMonth);
@@ -53,6 +73,52 @@ export function Sidebar({
     railRef.current?.scrollTo({ top: 0 });
   }, []);
 
+  // ⌘K (Ctrl+K off a Mac) focuses search from anywhere.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const mod = isMac() ? e.metaKey : e.ctrlKey;
+      if (!mod || e.altKey || e.key.toLowerCase() !== "k") return;
+      e.preventDefault();
+      box.current?.focus();
+      box.current?.select();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
+  const openResult = (index: number) => {
+    const r = found.results[index];
+    if (!r) return;
+    setActive(index);
+    setOpened(`${r.day}/${r.notebook}`);
+    box.current?.blur();
+    onOpenResult(r, found.settled);
+  };
+
+  // Clearing the query brings the rail back, at the opened Day.
+  const clear = () => {
+    setQ("");
+    setAnchor(day.slice(0, 7));
+  };
+
+  const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    const n = found.results.length;
+    if ((e.key === "ArrowDown" || e.key === "ArrowUp") && n > 0) {
+      e.preventDefault();
+      const next = moveActive(active, n, e.key);
+      setActive(next.active);
+      if (next.loadMore) found.loadMore();
+    } else if (e.key === "Enter" && n > 0) {
+      e.preventDefault();
+      openResult(active);
+    } else if (e.key === "Escape") {
+      e.preventDefault();
+      e.stopPropagation(); // not the opened Page's highlights
+      if (q) clear();
+      else box.current?.blur();
+    }
+  };
+
   return (
     <aside className={styles.sidebar}>
       <nav className={styles.nav} aria-label="Journal">
@@ -64,19 +130,66 @@ export function Sidebar({
           <SunIcon />
           Today
         </button>
+        <label className={`${search.box} ${q ? search.has : ""}`}>
+          <SearchIcon />
+          <input
+            ref={box}
+            type="search"
+            aria-label="Search"
+            placeholder="Search"
+            autoComplete="off"
+            spellCheck={false}
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            onKeyDown={onKeyDown}
+          />
+          {searching && found.loading && <span className={search.spin} />}
+          {q ? (
+            <button
+              type="button"
+              className={search.clear}
+              aria-label="Clear search"
+              onClick={() => {
+                clear();
+                box.current?.focus();
+              }}
+            >
+              ×
+            </button>
+          ) : (
+            <kbd>{isMac() ? "⌘K" : "Ctrl K"}</kbd>
+          )}
+        </label>
       </nav>
       <div className={styles.divider} />
       <div className={styles.railWrap}>
-        <Rail
-          key={anchor}
-          anchor={anchor}
-          me={me}
-          day={day}
-          railRef={railRef}
-          onOpen={open}
-          onMonthInView={setInView}
-        />
-        <ScrubberFromSummary me={me} inView={inView} onJump={jump} />
+        {searching ? (
+          <SearchResults
+            q={found.settled}
+            results={found.results}
+            today={me.today}
+            active={active}
+            opened={opened === `${day}/${notebook}` ? opened : null}
+            firstLoad={found.firstLoad}
+            stale={found.stale}
+            hasMore={found.hasMore}
+            onLoadMore={found.loadMore}
+            onOpen={openResult}
+          />
+        ) : (
+          <>
+            <Rail
+              key={anchor}
+              anchor={anchor}
+              me={me}
+              day={day}
+              railRef={railRef}
+              onOpen={open}
+              onMonthInView={setInView}
+            />
+            <ScrubberFromSummary me={me} inView={inView} onJump={jump} />
+          </>
+        )}
       </div>
     </aside>
   );
@@ -168,6 +281,17 @@ function Rail({
     heightBefore.current = null;
   }, [months, railRef]);
 
+  // Coming back from search (or a jump), the open Day starts in the middle of the rail.
+  const revealed = useRef(false);
+  useLayoutEffect(() => {
+    const rail = railRef.current;
+    if (!rail || revealed.current || months.length === 0) return;
+    revealed.current = true;
+    const open = rail.querySelector<HTMLElement>('[aria-current="date"]');
+    const slot = open?.closest("li");
+    if (slot) rail.scrollTop = slot.offsetTop - rail.clientHeight / 2;
+  }, [months, railRef]);
+
   // The month whose sticky header is at the top, for the scrubber's marker.
   const onScroll = () => {
     const rail = railRef.current;
@@ -236,6 +360,24 @@ function Shimmer() {
       <div className={styles.placeholder} />
       <div className={styles.placeholder} />
     </>
+  );
+}
+
+function SearchIcon() {
+  return (
+    <svg
+      width="12"
+      height="12"
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      aria-hidden="true"
+      style={{ flex: "none" }}
+    >
+      <circle cx="7" cy="7" r="5" />
+      <path d="m11 11 4 4" />
+    </svg>
   );
 }
 

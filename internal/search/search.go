@@ -132,10 +132,10 @@ func prefixQuery(q string) string {
 	return strings.Join(words, " & ")
 }
 
-// Words splits q into lowercase runs of letters and digits.
+// Words splits q into lowercase runs of letters and numbers, as web/src/search/match.ts does.
 func Words(q string) []string {
 	return strings.FieldsFunc(strings.ToLower(q), func(r rune) bool {
-		return !unicode.IsLetter(r) && !unicode.IsDigit(r)
+		return !unicode.IsLetter(r) && !unicode.IsNumber(r)
 	})
 }
 
