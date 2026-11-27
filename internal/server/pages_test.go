@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/boinkkitty/zoop/internal/pages"
 )
 
 type pageBody struct {
@@ -63,8 +65,8 @@ func TestTodaysUnwrittenPageIsAnEmptyDocAtVersionZero(t *testing.T) {
 	if got.Version != 0 || got.UpdatedAt != nil {
 		t.Errorf("version %d updatedAt %v, want 0 and null", got.Version, got.UpdatedAt)
 	}
-	if got.SchemaVersion != 1 {
-		t.Errorf("schemaVersion = %d, want 1", got.SchemaVersion)
+	if got.SchemaVersion != pages.SchemaVersion {
+		t.Errorf("schemaVersion = %d, want %d", got.SchemaVersion, pages.SchemaVersion)
 	}
 	if !got.Editable {
 		t.Error("editable = false, want true for today")
@@ -114,7 +116,7 @@ type savePage struct {
 func (b *browser) save(day, notebook, doc string, baseVersion int) response {
 	b.app.t.Helper()
 	return b.do(http.MethodPut, "/api/v1/pages/"+day+"/"+notebook,
-		savePage{Doc: json.RawMessage(doc), SchemaVersion: 1, BaseVersion: baseVersion})
+		savePage{Doc: json.RawMessage(doc), SchemaVersion: pages.SchemaVersion, BaseVersion: baseVersion})
 }
 
 const helloDoc = `{"type":"doc","content":[
@@ -159,15 +161,36 @@ func TestASavedPageIsReadBackAtTheNextVersion(t *testing.T) {
 func TestASaveWithADocOutsideTheSchemaIsRefused(t *testing.T) {
 	app := startApp(t, tokyoMorning)
 	b := app.browser()
-	b.signup(uniqueEmail("bold"), "Asia/Tokyo")
+	b.signup(uniqueEmail("title-list"), "Asia/Tokyo")
 
-	bold := `{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"Hi","marks":[{"type":"bold"}]}]}]}`
-	res := b.save("2026-11-26", "my-journal", bold, 0)
+	// The Title is always a plain line: a list in its place is outside the schema.
+	titleList := `{"type":"doc","content":[{"type":"bulletList","content":[
+		{"type":"listItem","content":[{"type":"paragraph","content":[{"type":"text","text":"Hi"}]}]}]}]}`
+	res := b.save("2026-11-26", "my-journal", titleList, 0)
 	if res.status != http.StatusBadRequest || res.errorCode(t) != "validation" {
-		t.Errorf("PUT with a bold mark = %d %s, want 400 validation", res.status, res.body)
+		t.Errorf("PUT with the Title as a list = %d %s, want 400 validation", res.status, res.body)
 	}
 	if got, _ := b.page("2026-11-26", "my-journal"); got.Version != 0 {
 		t.Errorf("version after refused save = %d, want 0", got.Version)
+	}
+}
+
+func TestAFormattedPageIsSavedAsWritten(t *testing.T) {
+	app := startApp(t, tokyoMorning)
+	b := app.browser()
+	b.signup(uniqueEmail("formatted"), "Asia/Tokyo")
+
+	formatted := `{"type":"doc","content":[
+		{"type":"paragraph","content":[{"type":"text","text":"To do"}]},
+		{"type":"paragraph","content":[{"type":"text","text":"bold","marks":[{"type":"bold"},{"type":"highlight"}]}]},
+		{"type":"taskList","content":[{"type":"taskItem","attrs":{"checked":true},"content":[
+			{"type":"paragraph","content":[{"type":"text","text":"Ferns"}]}]}]},
+		{"type":"blockquote","content":[{"type":"paragraph","content":[{"type":"text","text":"Said"}]}]}]}`
+	if res := b.save("2026-11-26", "my-journal", formatted, 0); res.status != http.StatusOK {
+		t.Fatalf("PUT = %d %s, want 200", res.status, res.body)
+	}
+	if got, _ := b.page("2026-11-26", "my-journal"); got.Version != 1 || !sameJSON(t, got.Doc, formatted) {
+		t.Errorf("GET = version %d doc %s, want version 1 and the formatted doc", got.Version, got.Doc)
 	}
 }
 
@@ -207,12 +230,12 @@ func TestASaveFromAnOlderSchemaIsClientOutdated(t *testing.T) {
 	b.signup(uniqueEmail("old-tab"), "Asia/Tokyo")
 
 	res := b.do(http.MethodPut, "/api/v1/pages/2026-11-26/my-journal",
-		savePage{Doc: json.RawMessage(helloDoc), SchemaVersion: 0, BaseVersion: 0})
+		savePage{Doc: json.RawMessage(helloDoc), SchemaVersion: pages.SchemaVersion - 1, BaseVersion: 0})
 	if res.status != http.StatusConflict || res.errorCode(t) != "client_outdated" {
-		t.Errorf("PUT with schemaVersion 0 = %d %s, want 409 client_outdated", res.status, res.body)
+		t.Errorf("PUT with an older schemaVersion =%d %s, want 409 client_outdated", res.status, res.body)
 	}
 	res = b.do(http.MethodPut, "/api/v1/pages/2026-11-26/my-journal",
-		savePage{Doc: json.RawMessage(helloDoc), SchemaVersion: 2, BaseVersion: 0})
+		savePage{Doc: json.RawMessage(helloDoc), SchemaVersion: pages.SchemaVersion + 1, BaseVersion: 0})
 	if res.status != http.StatusBadRequest || res.errorCode(t) != "validation" {
 		t.Errorf("PUT with a schemaVersion from the future = %d %s, want 400 validation", res.status, res.body)
 	}
