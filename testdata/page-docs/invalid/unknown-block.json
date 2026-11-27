@@ -1,0 +1,14 @@
+{
+  "notebook": "my-journal",
+  "doc": {
+    "type": "doc",
+    "content": [
+      {
+        "type": "heading",
+        "attrs": { "level": 1 },
+        "content": [{ "type": "text", "text": "hi" }]
+      }
+    ]
+  },
+  "why": "headings are not in the v1 schema"
+}

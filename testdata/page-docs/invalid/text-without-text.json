@@ -1,0 +1,8 @@
+{
+  "notebook": "my-journal",
+  "doc": {
+    "type": "doc",
+    "content": [{ "type": "paragraph", "content": [{ "type": "text" }] }]
+  },
+  "why": "a text node needs its text"
+}

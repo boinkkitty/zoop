@@ -14,7 +14,5 @@ export default defineConfig({
   test: {
     root: ".",
     include: ["web/src/**/*.test.ts", "web/src/**/*.test.tsx"],
-    // The first Vitest suites (autosave queue, Notice rules) arrive with #21 and #24.
-    passWithNoTests: true,
   },
 });

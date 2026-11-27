@@ -1,0 +1,15 @@
+{
+  "notebook": "my-journal",
+  "doc": {
+    "type": "doc",
+    "content": [
+      {
+        "type": "paragraph",
+        "content": [
+          { "type": "text", "text": "Title", "marks": [{ "type": "bold" }] }
+        ]
+      }
+    ]
+  },
+  "why": "the Title is bold by CSS; no marks are in the schema yet"
+}
