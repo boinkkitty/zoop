@@ -145,7 +145,7 @@ func (s *Service) Save(ctx context.Context, userID uuid.UUID, day time.Time, not
 
 type writer struct {
 	Writer
-	loc   *time.Location
+	cal   days.Calendar
 	now   time.Time
 	today time.Time
 }
@@ -155,19 +155,19 @@ func (s *Service) writer(ctx context.Context, userID uuid.UUID) (writer, error) 
 	if err != nil {
 		return writer{}, err
 	}
-	loc, err := time.LoadLocation(w.Timezone)
+	cal, err := days.LoadCalendar(w.Timezone, w.NextTimezone, w.SwitchDay)
 	if err != nil {
-		return writer{}, fmt.Errorf("stored timezone %q: %w", w.Timezone, err)
+		return writer{}, err
 	}
 	now := s.clock.Now(ctx)
-	return writer{Writer: w, loc: loc, now: now, today: days.Today(now, loc)}, nil
+	return writer{Writer: w, cal: cal, now: now, today: cal.Today(now)}, nil
 }
 
 // access says whether day is editable now, and when it stops being.
 func (w writer) access(day time.Time) (bool, *time.Time) { return w.accessAt(day, w.now) }
 
 func (w writer) accessAt(day, now time.Time) (bool, *time.Time) {
-	return days.Access(days.Writer{Premium: w.Plan == "premium", FirstDay: w.FirstDay, Loc: w.loc}, day, now)
+	return days.Access(days.Writer{Premium: w.Plan == "premium", FirstDay: w.FirstDay, Calendar: w.cal}, day, now)
 }
 
 // writable says whether a save of day arriving now counts: a save the editor sent

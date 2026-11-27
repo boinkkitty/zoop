@@ -1,5 +1,5 @@
 -- name: GetWriter :one
-SELECT plan, first_day, timezone
+SELECT plan, first_day, timezone, next_timezone, timezone_switch_day
 FROM users
 WHERE id = @id AND deleted_at IS NULL;
 

@@ -27,11 +27,13 @@ export function PageEditor({
   owner,
   today,
   timezone,
+  accountNotices = [],
 }: {
   page: Page;
   owner: string;
   today: string;
   timezone: string;
+  accountNotices?: Notice[]; // about the account rather than this Page
 }) {
   const queryClient = useQueryClient();
   const editorRef = useRef<Editor | null>(null);
@@ -93,6 +95,7 @@ export function PageEditor({
   const notices = useSaverNotices(saver, status);
   const dayClosed = useDayClosedNotice(page, today, status.locked);
   if (dayClosed) notices.push(dayClosed);
+  notices.push(...accountNotices);
 
   return (
     <>

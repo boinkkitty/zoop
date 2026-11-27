@@ -65,9 +65,14 @@ DELETE FROM sessions WHERE token_hash = @token_hash;
 DELETE FROM sessions WHERE expires_at <= @now;
 
 -- name: GetUser :one
-SELECT email, email_verified_at, plan, first_day, timezone, next_timezone
+SELECT email, email_verified_at, plan, first_day, timezone, next_timezone, timezone_switch_day
 FROM users
 WHERE id = @id AND deleted_at IS NULL;
 
 -- name: ListSignInMethods :many
 SELECT provider FROM auth_identities WHERE user_id = @user_id ORDER BY provider;
+
+-- name: SetTimezone :exec
+UPDATE users
+SET timezone = @timezone, next_timezone = @next_timezone, timezone_switch_day = @timezone_switch_day, updated_at = @now
+WHERE id = @id AND deleted_at IS NULL;
