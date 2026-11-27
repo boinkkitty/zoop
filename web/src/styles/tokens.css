@@ -3,11 +3,12 @@
   --color-sheet: #ffffff;
   --color-ink: #1d1d1f;
   --color-muted: #6e6e73;
+  --color-faint: #86868b;
   --color-line: #d2d2d7;
   --color-danger: #d70015;
   --radius-sheet: 18px;
   --radius-control: 10px;
-  --shadow-sheet: 0 1px 2px rgb(0 0 0 / 4%), 0 8px 28px rgb(0 0 0 / 6%);
+  --shadow-sheet: 0 1px 1px rgb(0 0 0 / 3%), 0 8px 28px rgb(0 0 0 / 5%);
   --ease-spring: cubic-bezier(0.32, 1.25, 0.5, 1);
   --hover-delay: 150ms;
 }

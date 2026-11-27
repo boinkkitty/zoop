@@ -12,6 +12,7 @@ import (
 	"github.com/boinkkitty/zoop/internal/clock"
 	"github.com/boinkkitty/zoop/internal/google"
 	"github.com/boinkkitty/zoop/internal/mail"
+	"github.com/boinkkitty/zoop/internal/pages"
 	"github.com/boinkkitty/zoop/internal/postgres"
 	"github.com/boinkkitty/zoop/internal/server"
 )
@@ -33,6 +34,7 @@ func New(d Deps) http.Handler {
 	}
 	return server.New(server.Deps{
 		Auth:   auth.New(postgres.NewAuthStore(d.DB), d.Clock, g),
+		Pages:  pages.New(postgres.NewPageStore(d.DB), d.Clock),
 		Ping:   postgres.Ping(d.DB),
 		Assets: d.Assets,
 	})

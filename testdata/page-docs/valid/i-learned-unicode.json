@@ -1,0 +1,13 @@
+{
+  "notebook": "i-learned",
+  "doc": {
+    "type": "doc",
+    "content": [
+      {
+        "type": "paragraph",
+        "content": [{ "type": "text", "text": "Ünïcödé ✓ 日本語" }]
+      }
+    ]
+  },
+  "plainText": "Ünïcödé ✓ 日本語"
+}

@@ -13,11 +13,13 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/boinkkitty/zoop/internal/auth"
+	"github.com/boinkkitty/zoop/internal/pages"
 )
 
 // Deps is what the router drives. internal/app builds it.
 type Deps struct {
 	Auth   *auth.Service
+	Pages  *pages.Service
 	Ping   func(context.Context) error // backs /api/healthz
 	Assets fs.FS                       // the built frontend; must contain index.html
 }
@@ -37,6 +39,8 @@ func New(d Deps) http.Handler {
 			v1.Group(func(signedIn chi.Router) {
 				signedIn.Use(requireUser(authn))
 				signedIn.Get("/me", getMe(authn))
+				signedIn.Get("/pages/{day}/{notebook}", getPage(d.Pages))
+				signedIn.Put("/pages/{day}/{notebook}", putPage(d.Pages))
 			})
 		})
 		api.NotFound(func(w http.ResponseWriter, r *http.Request) {
