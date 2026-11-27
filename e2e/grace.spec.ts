@@ -1,4 +1,4 @@
-import { type BrowserContext, expect, test } from "@playwright/test";
+import { type BrowserContext, expect, test } from "./fixtures";
 
 // The 02:00 lock, with time moved on both sides: Playwright's clock in the browser,
 // and the test-only server clock (built with -tags testclock), shifted per browser by a cookie.
