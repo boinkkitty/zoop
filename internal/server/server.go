@@ -28,6 +28,10 @@ type Deps struct {
 	Assets fs.FS                       // the built frontend; must contain index.html
 	Log    *slog.Logger                // allowlisting; see internal/logging
 	Sentry *sentry.Client              // nil turns error reporting off
+
+	// TrustedProxies is how many proxies in front of the app append to X-Forwarded-For
+	// (Railway: 1). With 0 the header is ignored and the peer's address is the client's.
+	TrustedProxies int
 }
 
 // New returns the app's root handler.
@@ -35,7 +39,7 @@ func New(d Deps) http.Handler {
 	authn := d.Auth
 	rep := &reporter{log: d.Log, sentry: d.Sentry}
 	r := chi.NewRouter()
-	r.Use(accessLog(d.Log), recoverPanics(rep))
+	r.Use(accessLog(d.Log), recoverPanics(rep), withClientIP(d.TrustedProxies))
 
 	// CSRF: browsers label cross-site requests, so state-changing ones from other sites are refused.
 	csrf := http.NewCrossOriginProtection()

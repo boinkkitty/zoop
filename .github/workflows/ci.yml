@@ -110,6 +110,7 @@ jobs:
         run: |
           docker run -d --name zoop --network host \
             -e PORT=8091 \
+            -e TRUSTED_PROXIES=1 \
             -e DATABASE_URL="postgres://zoop:zoop@localhost:5433/zoop?sslmode=disable" \
             zoop:ci
           for i in $(seq 1 60); do

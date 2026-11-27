@@ -4,9 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"net"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -278,22 +276,6 @@ func setSessionCookie(w http.ResponseWriter, r *http.Request, sess auth.Session)
 		Secure:   isHTTPS(r),
 		SameSite: http.SameSiteLaxMode,
 	})
-}
-
-// clientIP is the visitor's address as Railway's proxy reports it, or the peer's without a proxy.
-// It trusts one hop: the proxy appends the address it saw, and anything before that is the client's say-so.
-func clientIP(r *http.Request) string {
-	if fwd := r.Header.Values("X-Forwarded-For"); len(fwd) > 0 {
-		hops := strings.Split(fwd[len(fwd)-1], ",")
-		if last := strings.TrimSpace(hops[len(hops)-1]); last != "" {
-			return last
-		}
-	}
-	host, _, err := net.SplitHostPort(r.RemoteAddr)
-	if err != nil {
-		return r.RemoteAddr
-	}
-	return host
 }
 
 // isHTTPS is true behind Railway's TLS-terminating proxy, and false for local http.

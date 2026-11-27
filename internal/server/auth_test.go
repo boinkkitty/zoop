@@ -46,7 +46,9 @@ func startApp(t *testing.T, now time.Time) *testApp {
 		Clock:  c,
 		Mailer: outbox,
 		AppURL: srv.URL,
-		Assets: assets,
+		// As behind Railway: each browser's ip is the hop its proxy appends.
+		TrustedProxies: 1,
+		Assets:         assets,
 		Google: &google.Config{
 			Issuer:       stub.Issuer(),
 			ClientID:     googletest.ClientID,

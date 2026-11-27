@@ -34,6 +34,8 @@ type Deps struct {
 	Logs   io.Writer      // where JSON log lines go; nil discards them
 	Sentry *sentry.Client // from errreport.NewClient; nil turns reporting off
 	Google *google.Config // nil when Google sign-in isn't configured
+
+	TrustedProxies int // proxies in front that append to X-Forwarded-For; see server.Deps
 }
 
 // Swept is how many expired rows one Sweep deleted.
@@ -85,5 +87,7 @@ func New(d Deps) http.Handler {
 		Limits: limits,
 		Ping:   postgres.Ping(d.DB),
 		Assets: d.Assets,
+
+		TrustedProxies: d.TrustedProxies,
 	})
 }
