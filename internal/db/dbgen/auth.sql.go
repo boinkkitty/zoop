@@ -124,6 +124,18 @@ func (q *Queries) CreateVerifiedUser(ctx context.Context, arg CreateVerifiedUser
 	return id, err
 }
 
+const deleteExpiredSessions = `-- name: DeleteExpiredSessions :execrows
+DELETE FROM sessions WHERE expires_at <= $1
+`
+
+func (q *Queries) DeleteExpiredSessions(ctx context.Context, now time.Time) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteExpiredSessions, now)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const deletePasswordIdentity = `-- name: DeletePasswordIdentity :exec
 DELETE FROM auth_identities WHERE user_id = $1 AND provider = 'password'
 `

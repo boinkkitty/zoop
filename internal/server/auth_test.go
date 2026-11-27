@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -52,15 +53,23 @@ func startApp(t *testing.T, now time.Time) *testApp {
 	return &testApp{t: t, srv: srv, clock: c, google: stub}
 }
 
-// browser is one device with its own cookies. Unlike net/http/cookiejar it
-// expires cookies by the app's Clock, so moving the Clock ages them too.
+// browser is one device with its own cookies and its own IP address. Unlike
+// net/http/cookiejar it expires cookies by the app's Clock, so moving the Clock ages them too.
 type browser struct {
 	app     *testApp
 	cookies map[string]*http.Cookie
+	ip      string // what Railway's proxy reports in X-Forwarded-For
 }
 
 func (a *testApp) browser() *browser {
-	return &browser{app: a, cookies: map[string]*http.Cookie{}}
+	return &browser{app: a, cookies: map[string]*http.Cookie{}, ip: randomIP()}
+}
+
+// randomIP keeps per-IP rate limits apart between tests in the shared database.
+func randomIP() string {
+	b := make([]byte, 3)
+	_, _ = rand.Read(b)
+	return fmt.Sprintf("10.%d.%d.%d", b[0], b[1], b[2])
 }
 
 func (b *browser) keep(c *http.Cookie) {
@@ -111,6 +120,7 @@ func (b *browser) do(method, path string, body any, headers ...string) response 
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
+	req.Header.Set("X-Forwarded-For", b.ip)
 	for i := 0; i+1 < len(headers); i += 2 {
 		req.Header.Set(headers[i], headers[i+1])
 	}

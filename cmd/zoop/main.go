@@ -23,6 +23,9 @@ import (
 	"github.com/boinkkitty/zoop/web"
 )
 
+// sweepEvery is how often expired sessions and rate-limit rows are deleted.
+const sweepEvery = 15 * time.Minute
+
 func main() {
 	if err := run(); err != nil {
 		slog.Error("zoop exited", "err", err)
@@ -54,15 +57,18 @@ func run() error {
 	}
 	defer pool.Close()
 
+	deps := app.Deps{
+		DB:     pool,
+		Clock:  clock.System{},
+		Mailer: mail.Unconfigured{},
+		Assets: web.Dist(),
+		Google: googleCfg,
+	}
+	go app.KeepSwept(ctx, deps, sweepEvery)
+
 	srv := &http.Server{
-		Addr: ":" + port,
-		Handler: app.New(app.Deps{
-			DB:     pool,
-			Clock:  clock.System{},
-			Mailer: mail.Unconfigured{},
-			Assets: web.Dist(),
-			Google: googleCfg,
-		}),
+		Addr:              ":" + port,
+		Handler:           app.New(deps),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 
