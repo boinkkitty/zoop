@@ -124,6 +124,24 @@ func (q *Queries) CreateVerifiedUser(ctx context.Context, arg CreateVerifiedUser
 	return id, err
 }
 
+const deactivateUser = `-- name: DeactivateUser :one
+UPDATE users SET deleted_at = $1::timestamptz, updated_at = $1
+WHERE id = $2 AND deleted_at IS NULL
+RETURNING email
+`
+
+type DeactivateUserParams struct {
+	Now time.Time
+	ID  uuid.UUID
+}
+
+func (q *Queries) DeactivateUser(ctx context.Context, arg DeactivateUserParams) (string, error) {
+	row := q.db.QueryRow(ctx, deactivateUser, arg.Now, arg.ID)
+	var email string
+	err := row.Scan(&email)
+	return email, err
+}
+
 const deleteExpiredSessions = `-- name: DeleteExpiredSessions :execrows
 DELETE FROM sessions WHERE expires_at <= $1
 `
@@ -164,17 +182,23 @@ func (q *Queries) DeleteUserSessions(ctx context.Context, userID uuid.UUID) erro
 }
 
 const getGoogleLogin = `-- name: GetGoogleLogin :one
-SELECT u.id
+SELECT u.id, u.deleted_at
 FROM users u
 JOIN auth_identities i ON i.user_id = u.id AND i.provider = 'google'
-WHERE i.subject = $1 AND u.deleted_at IS NULL
+WHERE i.subject = $1
 `
 
-func (q *Queries) GetGoogleLogin(ctx context.Context, subject string) (uuid.UUID, error) {
+type GetGoogleLoginRow struct {
+	ID        uuid.UUID
+	DeletedAt *time.Time
+}
+
+// Deactivated Accounts too, so the sign-in can say the account is gone.
+func (q *Queries) GetGoogleLogin(ctx context.Context, subject string) (GetGoogleLoginRow, error) {
 	row := q.db.QueryRow(ctx, getGoogleLogin, subject)
-	var id uuid.UUID
-	err := row.Scan(&id)
-	return id, err
+	var i GetGoogleLoginRow
+	err := row.Scan(&i.ID, &i.DeletedAt)
+	return i, err
 }
 
 const getLiveSession = `-- name: GetLiveSession :one
@@ -209,21 +233,23 @@ func (q *Queries) GetLiveSession(ctx context.Context, arg GetLiveSessionParams) 
 }
 
 const getPasswordLogin = `-- name: GetPasswordLogin :one
-SELECT u.id, i.password_hash
+SELECT u.id, i.password_hash, u.deleted_at
 FROM users u
 JOIN auth_identities i ON i.user_id = u.id AND i.provider = 'password'
-WHERE u.email = $1 AND u.deleted_at IS NULL
+WHERE u.email = $1
 `
 
 type GetPasswordLoginRow struct {
 	ID           uuid.UUID
 	PasswordHash *string
+	DeletedAt    *time.Time
 }
 
+// Deactivated Accounts too, so the right password can be told the account is gone.
 func (q *Queries) GetPasswordLogin(ctx context.Context, email string) (GetPasswordLoginRow, error) {
 	row := q.db.QueryRow(ctx, getPasswordLogin, email)
 	var i GetPasswordLoginRow
-	err := row.Scan(&i.ID, &i.PasswordHash)
+	err := row.Scan(&i.ID, &i.PasswordHash, &i.DeletedAt)
 	return i, err
 }
 
@@ -259,18 +285,20 @@ func (q *Queries) GetUser(ctx context.Context, id uuid.UUID) (GetUserRow, error)
 }
 
 const getUserByEmail = `-- name: GetUserByEmail :one
-SELECT id, email_verified_at FROM users WHERE email = $1 AND deleted_at IS NULL
+SELECT id, email_verified_at, deleted_at FROM users WHERE email = $1
 `
 
 type GetUserByEmailRow struct {
 	ID              uuid.UUID
 	EmailVerifiedAt *time.Time
+	DeletedAt       *time.Time
 }
 
+// Deactivated Accounts too: their emails stay taken.
 func (q *Queries) GetUserByEmail(ctx context.Context, email string) (GetUserByEmailRow, error) {
 	row := q.db.QueryRow(ctx, getUserByEmail, email)
 	var i GetUserByEmailRow
-	err := row.Scan(&i.ID, &i.EmailVerifiedAt)
+	err := row.Scan(&i.ID, &i.EmailVerifiedAt, &i.DeletedAt)
 	return i, err
 }
 

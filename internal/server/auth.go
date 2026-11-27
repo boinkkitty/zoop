@@ -67,12 +67,37 @@ func logout(a *auth.Service, rep *reporter) http.HandlerFunc {
 				return
 			}
 		}
-		http.SetCookie(w, &http.Cookie{
-			Name: sessionCookie, Path: "/", MaxAge: -1,
-			HttpOnly: true, Secure: isHTTPS(r), SameSite: http.SameSiteLaxMode,
-		})
+		clearSessionCookie(w, r)
 		w.WriteHeader(http.StatusNoContent)
 	}
+}
+
+// deleteMe deactivates the account and signs this device out.
+func deleteMe(a *auth.Service, rep *reporter) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var body emailBody
+		if !decode(w, r, &body) {
+			return
+		}
+		err := a.Deactivate(r.Context(), userID(r), body.Email)
+		if errors.Is(err, auth.ErrMailNotSent) {
+			rep.report(r, err) // deactivated all the same
+			err = nil
+		}
+		if err != nil {
+			writeAuthError(w, r, rep, err)
+			return
+		}
+		clearSessionCookie(w, r)
+		w.WriteHeader(http.StatusNoContent)
+	}
+}
+
+func clearSessionCookie(w http.ResponseWriter, r *http.Request) {
+	http.SetCookie(w, &http.Cookie{
+		Name: sessionCookie, Path: "/", MaxAge: -1,
+		HttpOnly: true, Secure: isHTTPS(r), SameSite: http.SameSiteLaxMode,
+	})
 }
 
 type tokenBody struct {
@@ -293,6 +318,8 @@ func writeAuthError(w http.ResponseWriter, r *http.Request, rep *reporter, err e
 		writeError(w, http.StatusBadRequest, "validation", v.Message)
 	case errors.Is(err, auth.ErrEmailTaken):
 		writeError(w, http.StatusConflict, "email_taken", "That email already has an account. Sign in instead.")
+	case errors.Is(err, auth.ErrDeactivated):
+		writeError(w, http.StatusForbidden, "account_deactivated", "This account was deactivated.")
 	case errors.Is(err, auth.ErrBadLogin):
 		writeError(w, http.StatusUnauthorized, "unauthenticated", "Wrong email or password.")
 	case errors.Is(err, auth.ErrBadToken):

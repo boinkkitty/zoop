@@ -1,23 +1,18 @@
 import * as Dialog from "@radix-ui/react-dialog";
-import { useEffect, useState } from "react";
 import styles from "./ShortcutSheet.module.css";
-import { isSheetShortcut, keyLabels, shortcutGroups } from "./shortcuts";
+import { keyLabels, shortcutGroups } from "./shortcuts";
 
-// The shortcut sheet, opened (and closed again) by ⌘/ from anywhere on the signed-in app.
-export function ShortcutSheet() {
-  const [open, setOpen] = useState(false);
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (!isSheetShortcut(e)) return;
-      e.preventDefault();
-      setOpen((o) => !o);
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, []);
-
+// The shortcut sheet, opened by ⌘/ or from Settings. The journal owns whether it's open,
+// so it and Settings never stack.
+export function ShortcutSheet({
+  open,
+  onOpenChange,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
   return (
-    <Dialog.Root open={open} onOpenChange={setOpen}>
+    <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
         <Dialog.Overlay className={styles.overlay} />
         <Dialog.Content className={styles.sheet}>

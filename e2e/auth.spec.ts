@@ -41,6 +41,7 @@ test("sign up, land in the app, sign out, sign in again", async ({ page }) => {
   await expect(page.getByText(email, { exact: true })).toBeVisible();
   expect(scripts.some((u) => appChunk.test(u))).toBe(true);
 
+  await page.getByRole("button", { name: "Settings" }).click();
   await page.getByRole("button", { name: "Sign out" }).click();
   await expect(page).toHaveURL(/\/signin$/);
   await page.goto("/");

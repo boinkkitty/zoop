@@ -48,6 +48,15 @@ func (q *Queries) DeleteExpiredEmailTokens(ctx context.Context, now time.Time) (
 	return result.RowsAffected(), nil
 }
 
+const deleteUserEmailTokens = `-- name: DeleteUserEmailTokens :exec
+DELETE FROM email_tokens WHERE user_id = $1
+`
+
+func (q *Queries) DeleteUserEmailTokens(ctx context.Context, userID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, deleteUserEmailTokens, userID)
+	return err
+}
+
 const markEmailVerified = `-- name: MarkEmailVerified :exec
 UPDATE users SET email_verified_at = coalesce(email_verified_at, $1::timestamptz), updated_at = $1
 WHERE id = $2

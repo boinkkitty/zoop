@@ -27,10 +27,12 @@ export function Sidebar({
   me,
   day,
   notebook,
+  onOpenSettings,
 }: {
   me: Me;
   day: string;
   notebook: string;
+  onOpenSettings: () => void;
 }) {
   const navigate = useNavigate();
   const thisMonth = me.today.slice(0, 7);
@@ -63,6 +65,14 @@ export function Sidebar({
         >
           <SunIcon />
           Today
+        </button>
+        <button
+          type="button"
+          className={styles.navItem}
+          onClick={onOpenSettings}
+        >
+          <GearIcon />
+          Settings
         </button>
       </nav>
       <div className={styles.divider} />
@@ -253,6 +263,26 @@ function SunIcon() {
     >
       <circle cx="8" cy="8" r="3" />
       <path d="M8 1.5v1.5M8 13v1.5M1.5 8H3M13 8h1.5M3.4 3.4l1 1M11.6 11.6l1 1M3.4 12.6l1-1M11.6 4.4l1-1" />
+    </svg>
+  );
+}
+
+function GearIcon() {
+  return (
+    <svg
+      width="15"
+      height="15"
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <circle cx="8" cy="8" r="2.2" />
+      <path d="M8 1.5v1.6M8 12.9v1.6M1.5 8h1.6M12.9 8h1.6M3.4 3.4l1.1 1.1M11.5 11.5l1.1 1.1M3.4 12.6l1.1-1.1M11.5 4.5l1.1-1.1" />
+      <circle cx="8" cy="8" r="4.6" />
     </svg>
   );
 }

@@ -92,6 +92,8 @@ func redirectToSignIn(w http.ResponseWriter, r *http.Request, rep *reporter, err
 		code = "google_unavailable"
 	case errors.Is(err, auth.ErrGoogleUnverified):
 		code = "google_unverified"
+	case errors.Is(err, auth.ErrDeactivated):
+		code = "account_deactivated"
 	case errors.Is(err, auth.ErrGoogleFailed), errors.As(err, &v):
 		slog.Info("google sign-in refused", "err", err)
 	default:

@@ -83,12 +83,12 @@ func (s *AuthStore) CreateGoogleAccount(ctx context.Context, a auth.NewGoogleAcc
 	return userID, tx.Commit(ctx)
 }
 
-func (s *AuthStore) GoogleLogin(ctx context.Context, subject string) (uuid.UUID, error) {
-	id, err := s.q.GetGoogleLogin(ctx, subject)
+func (s *AuthStore) GoogleLogin(ctx context.Context, subject string) (uuid.UUID, bool, error) {
+	row, err := s.q.GetGoogleLogin(ctx, subject)
 	if err != nil {
-		return uuid.Nil, notFound(err)
+		return uuid.Nil, false, notFound(err)
 	}
-	return id, nil
+	return row.ID, row.DeletedAt != nil, nil
 }
 
 func (s *AuthStore) UserByEmail(ctx context.Context, email string) (auth.EmailOwner, error) {
@@ -96,7 +96,7 @@ func (s *AuthStore) UserByEmail(ctx context.Context, email string) (auth.EmailOw
 	if err != nil {
 		return auth.EmailOwner{}, notFound(err)
 	}
-	return auth.EmailOwner{UserID: row.ID, EmailVerified: row.EmailVerifiedAt != nil}, nil
+	return auth.EmailOwner{UserID: row.ID, EmailVerified: row.EmailVerifiedAt != nil, Deactivated: row.DeletedAt != nil}, nil
 }
 
 func (s *AuthStore) LinkGoogle(ctx context.Context, l auth.GoogleLink, first auth.NewSession) error {
@@ -134,15 +134,15 @@ func (s *AuthStore) LinkGoogle(ctx context.Context, l auth.GoogleLink, first aut
 	return tx.Commit(ctx)
 }
 
-func (s *AuthStore) PasswordLogin(ctx context.Context, email string) (uuid.UUID, string, error) {
+func (s *AuthStore) PasswordLogin(ctx context.Context, email string) (auth.PasswordIdentity, error) {
 	row, err := s.q.GetPasswordLogin(ctx, email)
 	if err != nil {
-		return uuid.Nil, "", notFound(err)
+		return auth.PasswordIdentity{}, notFound(err)
 	}
 	if row.PasswordHash == nil { // ruled out by the auth_identities CHECK
-		return uuid.Nil, "", fmt.Errorf("password identity for user %s has no hash", row.ID)
+		return auth.PasswordIdentity{}, fmt.Errorf("password identity for user %s has no hash", row.ID)
 	}
-	return row.ID, *row.PasswordHash, nil
+	return auth.PasswordIdentity{UserID: row.ID, PasswordHash: *row.PasswordHash, Deactivated: row.DeletedAt != nil}, nil
 }
 
 func (s *AuthStore) CreateSession(ctx context.Context, userID uuid.UUID, sess auth.NewSession) error {
@@ -207,4 +207,25 @@ func (s *AuthStore) SetTimezone(ctx context.Context, id uuid.UUID, tz auth.Store
 	return s.q.SetTimezone(ctx, dbgen.SetTimezoneParams{
 		ID: id, Timezone: tz.Timezone, NextTimezone: tz.NextTimezone, TimezoneSwitchDay: tz.SwitchDay, Now: now,
 	})
+}
+
+func (s *AuthStore) Deactivate(ctx context.Context, id uuid.UUID, now time.Time) (string, error) {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return "", err
+	}
+	defer tx.Rollback(ctx)
+	q := s.q.WithTx(tx)
+
+	email, err := q.DeactivateUser(ctx, dbgen.DeactivateUserParams{ID: id, Now: now})
+	if err != nil {
+		return "", notFound(err)
+	}
+	if err := q.DeleteUserSessions(ctx, id); err != nil {
+		return "", fmt.Errorf("delete sessions: %w", err)
+	}
+	if err := q.DeleteUserEmailTokens(ctx, id); err != nil {
+		return "", fmt.Errorf("delete email tokens: %w", err)
+	}
+	return email, tx.Commit(ctx)
 }
