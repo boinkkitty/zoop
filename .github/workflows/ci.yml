@@ -1,0 +1,96 @@
+# Every push to main and every PR: all four suites, including Playwright against the Docker image.
+# Deploying to Railway is not wired up yet (#19).
+name: CI and deploy
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  web:
+    name: Biome and Vitest
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
+      - run: pnpm test
+
+  go:
+    name: go test
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: zoop
+          POSTGRES_PASSWORD: zoop
+          POSTGRES_DB: zoop
+        ports: ["5433:5432"]
+        options: >-
+          --health-cmd "pg_isready -U zoop -d zoop"
+          --health-interval 2s --health-timeout 2s --health-retries 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - run: go vet ./...
+      - run: go test ./...
+
+  e2e:
+    name: Playwright against the image
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: zoop
+          POSTGRES_PASSWORD: zoop
+          POSTGRES_DB: zoop
+        ports: ["5433:5432"]
+        options: >-
+          --health-cmd "pg_isready -U zoop -d zoop"
+          --health-interval 2s --health-timeout 2s --health-retries 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec playwright install --with-deps chromium
+      - name: Build the image
+        run: docker build -t zoop:ci .
+      - name: Start the image on an empty database
+        run: |
+          docker run -d --name zoop --network host \
+            -e PORT=8091 \
+            -e DATABASE_URL="postgres://zoop:zoop@localhost:5433/zoop?sslmode=disable" \
+            zoop:ci
+          for i in $(seq 1 60); do
+            curl -fs http://localhost:8091/api/healthz && exit 0
+            sleep 1
+          done
+          docker logs zoop
+          exit 1
+      - run: pnpm e2e
+        env:
+          ZOOP_E2E_BASE_URL: http://localhost:8091
+      - if: failure()
+        run: docker logs zoop
