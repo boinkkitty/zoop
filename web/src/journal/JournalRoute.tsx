@@ -4,7 +4,10 @@ import {
   useSuspenseQuery,
 } from "@tanstack/react-query";
 import { createLazyRoute, useNavigate } from "@tanstack/react-router";
-import { logout } from "../api";
+import { useState } from "react";
+import { logout, type Me, setTimezone } from "../api";
+import type { Notice } from "../notices/NoticePill";
+import { keepTimezone, timezoneNotice } from "../notices/timezone";
 import { PageEditor } from "../page/PageEditor";
 import { pageQuery } from "../page/queries";
 import { meQuery } from "../router";
@@ -20,6 +23,7 @@ function JournalRoute() {
   const { data: page } = useSuspenseQuery(pageQuery(day, notebook));
   const queryClient = useQueryClient();
   const navigate = useNavigate();
+  const timezone = useTimezoneNotice(me);
 
   const signOut = useMutation({
     mutationFn: logout,
@@ -48,8 +52,46 @@ function JournalRoute() {
           owner={me.email}
           today={me.today}
           timezone={me.timezone}
+          accountNotices={timezone ? [timezone] : []}
         />
       </article>
     </main>
   );
+}
+
+// The timezone Notice, from comparing the browser's zone with the profile on load.
+function useTimezoneNotice(me: Me): Notice | null {
+  const queryClient = useQueryClient();
+  const [browserZone] = useState(
+    () => Intl.DateTimeFormat().resolvedOptions().timeZone,
+  );
+  const [answered, setAnswered] = useState(false);
+  const switchZone = useMutation({
+    mutationFn: setTimezone,
+    onSuccess: (updated) => {
+      queryClient.setQueryData(meQuery.queryKey, updated);
+      setAnswered(true);
+    },
+  });
+  const ask = timezoneNotice({ browserZone, me, storage: localStorage });
+  if (!ask || answered) return null;
+  return {
+    id: "timezone",
+    text: `Looks like you're on ${ask.place} time. Start your Days on ${ask.place} time from tomorrow?`,
+    actions: [
+      {
+        label: "Switch",
+        onClick: () => {
+          if (!switchZone.isPending) switchZone.mutate(ask.zone);
+        },
+      },
+      {
+        label: `Keep ${ask.currentPlace}`,
+        onClick: () => {
+          keepTimezone(localStorage, ask.zone);
+          setAnswered(true);
+        },
+      },
+    ],
+  };
 }

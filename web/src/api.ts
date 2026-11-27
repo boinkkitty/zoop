@@ -45,6 +45,7 @@ export type Me = {
   plan: "free" | "premium";
   timezone: string;
   pendingTimezone: string | null;
+  timezoneSwitchDay: string | null; // the first Day on pendingTimezone's time
   firstDay: string;
   today: string;
   graceUntil: string | null;
@@ -52,6 +53,10 @@ export type Me = {
 };
 
 export const getMe = () => request<Me>("GET", "/me");
+
+// setTimezone starts the user's Days on timezone's time from tomorrow; the zone in use cancels a pending switch.
+export const setTimezone = (timezone: string) =>
+  request<Me>("PATCH", "/me", { timezone });
 
 // A Page document as TipTap writes it. Type-only, so this file never loads TipTap.
 export type Doc = { type: "doc"; content?: JSONContent[] };

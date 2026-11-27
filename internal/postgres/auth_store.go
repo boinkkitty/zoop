@@ -181,6 +181,7 @@ func (s *AuthStore) User(ctx context.Context, id uuid.UUID) (auth.StoredUser, er
 		FirstDay:        u.FirstDay,
 		Timezone:        u.Timezone,
 		NextTimezone:    u.NextTimezone,
+		SwitchDay:       u.TimezoneSwitchDay,
 		SignInMethods:   methods,
 	}, nil
 }
@@ -200,4 +201,10 @@ func notFound(err error) error {
 		return auth.ErrNotFound
 	}
 	return err
+}
+
+func (s *AuthStore) SetTimezone(ctx context.Context, id uuid.UUID, tz auth.StoredTimezone, now time.Time) error {
+	return s.q.SetTimezone(ctx, dbgen.SetTimezoneParams{
+		ID: id, Timezone: tz.Timezone, NextTimezone: tz.NextTimezone, TimezoneSwitchDay: tz.SwitchDay, Now: now,
+	})
 }

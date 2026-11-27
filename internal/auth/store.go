@@ -45,6 +45,9 @@ type Store interface {
 
 	// User describes a live account, or returns ErrNotFound.
 	User(ctx context.Context, id uuid.UUID) (StoredUser, error)
+
+	// SetTimezone stores a live account's timezone and its pending switch, if any.
+	SetTimezone(ctx context.Context, id uuid.UUID, tz StoredTimezone, now time.Time) error
 }
 
 // ErrNotFound is how a Store says there's no such row.
@@ -103,5 +106,13 @@ type StoredUser struct {
 	FirstDay        time.Time
 	Timezone        string
 	NextTimezone    *string
+	SwitchDay       *time.Time
 	SignInMethods   []string
+}
+
+// StoredTimezone is a timezone and the switch to the next one, if pending.
+type StoredTimezone struct {
+	Timezone     string
+	NextTimezone *string
+	SwitchDay    *time.Time
 }
