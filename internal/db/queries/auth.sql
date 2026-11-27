@@ -61,6 +61,9 @@ UPDATE sessions SET last_seen_at = @now, expires_at = @expires_at WHERE id = @id
 -- name: DeleteSession :exec
 DELETE FROM sessions WHERE token_hash = @token_hash;
 
+-- name: DeleteExpiredSessions :execrows
+DELETE FROM sessions WHERE expires_at <= @now;
+
 -- name: GetUser :one
 SELECT email, email_verified_at, plan, first_day, timezone, next_timezone
 FROM users

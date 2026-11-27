@@ -40,6 +40,13 @@ type Page struct {
 	UpdatedAt     time.Time
 }
 
+type RateLimit struct {
+	Key         string
+	WindowStart time.Time
+	Count       int32
+	ExpiresAt   time.Time
+}
+
 type Session struct {
 	ID         uuid.UUID
 	TokenHash  []byte
