@@ -8,6 +8,7 @@ import { logout } from "../api";
 import { PageEditor } from "../page/PageEditor";
 import { pageQuery } from "../page/queries";
 import { meQuery } from "../router";
+import { ShortcutSheet } from "../shortcuts/ShortcutSheet";
 import styles from "./JournalRoute.module.css";
 
 export const Route = createLazyRoute("/day/$day/$notebook")({
@@ -50,6 +51,7 @@ function JournalRoute() {
           timezone={me.timezone}
         />
       </article>
+      <ShortcutSheet />
     </main>
   );
 }
