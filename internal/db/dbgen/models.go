@@ -27,6 +27,26 @@ type Notebook struct {
 	Position int16
 }
 
+type Page struct {
+	ID            uuid.UUID
+	UserID        uuid.UUID
+	NotebookID    int16
+	Day           time.Time
+	Doc           []byte
+	SchemaVersion int16
+	PlainText     string
+	Version       int32
+	CreatedAt     time.Time
+	UpdatedAt     time.Time
+}
+
+type RateLimit struct {
+	Key         string
+	WindowStart time.Time
+	Count       int32
+	ExpiresAt   time.Time
+}
+
 type Session struct {
 	ID         uuid.UUID
 	TokenHash  []byte

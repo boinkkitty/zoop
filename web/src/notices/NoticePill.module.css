@@ -1,0 +1,94 @@
+.pill {
+  position: absolute;
+  top: -18px;
+  left: 50%;
+  z-index: 10;
+  width: max-content;
+  max-width: min(560px, calc(100% - 32px));
+  padding: 6px 6px 6px 16px;
+  border-radius: 20px;
+  background: #1d1d1f;
+  color: #f5f5f7;
+  font-size: 13px;
+  box-shadow: 0 6px 24px rgb(0 0 0 / 22%);
+  transform: translateX(-50%);
+  animation: drop-in 0.5s var(--ease-spring);
+}
+
+@keyframes drop-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -16px) scale(0.92);
+  }
+}
+
+.top,
+.rest {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 28px;
+}
+
+/* Collapsed: only the most urgent Notice. Hover (after the rail's delay) or focus shows them all. */
+.rest {
+  display: none;
+  border-top: 1px solid rgb(255 255 255 / 12%);
+  padding-top: 6px;
+  margin-top: 6px;
+}
+
+.pill:hover .rest,
+.pill:focus-within .rest {
+  display: flex;
+  animation: unfold 0.35s var(--ease-spring) var(--hover-delay) both;
+}
+
+.more {
+  flex: none;
+  padding: 0 8px;
+  color: #8e8e93;
+  font-weight: 500;
+}
+
+.pill:hover .more,
+.pill:focus-within .more {
+  visibility: hidden;
+}
+
+@keyframes unfold {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+}
+
+.text {
+  flex: 1;
+  margin: 0 6px 0 0;
+  line-height: 1.35;
+}
+
+.action,
+.close {
+  flex: none;
+  border: 0;
+  border-radius: 999px;
+  padding: 6px 12px;
+  background: #3a3a3c;
+  color: #fff;
+  font: inherit;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.close {
+  padding: 6px 10px;
+  background: transparent;
+  color: #8e8e93;
+}
+
+.action:hover,
+.close:hover {
+  background: #48484a;
+}

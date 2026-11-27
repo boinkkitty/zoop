@@ -8,6 +8,37 @@ RETURNING id;
 INSERT INTO auth_identities (user_id, provider, subject, password_hash, created_at)
 VALUES (@user_id, 'password', @subject, @password_hash, @now);
 
+-- name: CreateVerifiedUser :one
+INSERT INTO users (email, email_verified_at, first_day, timezone, created_at, updated_at)
+VALUES (@email, @now::timestamptz, @first_day, @timezone, @now, @now)
+ON CONFLICT (email) DO NOTHING
+RETURNING id;
+
+-- name: CreateGoogleIdentity :exec
+INSERT INTO auth_identities (user_id, provider, subject, created_at)
+VALUES (@user_id, 'google', @subject, @now);
+
+-- name: GetGoogleLogin :one
+SELECT u.id
+FROM users u
+JOIN auth_identities i ON i.user_id = u.id AND i.provider = 'google'
+WHERE i.subject = @subject AND u.deleted_at IS NULL;
+
+-- name: GetUserByEmail :one
+SELECT id, email_verified_at FROM users WHERE email = @email AND deleted_at IS NULL;
+
+-- name: VerifyUnverifiedEmail :one
+-- Only matches while the email is still unverified, so a takeover never removes a verified password.
+UPDATE users SET email_verified_at = @now::timestamptz, updated_at = @now
+WHERE id = @id AND email_verified_at IS NULL
+RETURNING id;
+
+-- name: DeletePasswordIdentity :exec
+DELETE FROM auth_identities WHERE user_id = @user_id AND provider = 'password';
+
+-- name: DeleteUserSessions :exec
+DELETE FROM sessions WHERE user_id = @user_id;
+
 -- name: GetPasswordLogin :one
 SELECT u.id, i.password_hash
 FROM users u
@@ -29,6 +60,9 @@ UPDATE sessions SET last_seen_at = @now, expires_at = @expires_at WHERE id = @id
 
 -- name: DeleteSession :exec
 DELETE FROM sessions WHERE token_hash = @token_hash;
+
+-- name: DeleteExpiredSessions :execrows
+DELETE FROM sessions WHERE expires_at <= @now;
 
 -- name: GetUser :one
 SELECT email, email_verified_at, plan, first_day, timezone, next_timezone

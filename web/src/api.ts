@@ -1,3 +1,5 @@
+import type { JSONContent } from "@tiptap/core";
+
 // The JSON API client. Errors arrive as {error: {code, message}}.
 
 export class ApiError extends Error {
@@ -51,6 +53,26 @@ export type Me = {
 
 export const getMe = () => request<Me>("GET", "/me");
 
+// A Page document as TipTap writes it. Type-only, so this file never loads TipTap.
+export type Doc = { type: "doc"; content?: JSONContent[] };
+
+export type Page = {
+  day: string;
+  notebook: string;
+  doc: Doc;
+  schemaVersion: number;
+  version: number;
+  updatedAt: string | null;
+  editable: boolean;
+  locksAt: string | null;
+};
+
+export const pagePath = (day: string, notebook: string) =>
+  `/pages/${day}/${notebook}`;
+
+export const getPage = (day: string, notebook: string) =>
+  request<Page>("GET", pagePath(day, notebook));
+
 export const signup = (email: string, password: string) =>
   request<void>("POST", "/auth/signup", {
     email,
@@ -60,6 +82,21 @@ export const signup = (email: string, password: string) =>
 
 export const login = (email: string, password: string) =>
   request<void>("POST", "/auth/login", { email, password });
+
+// A full-page navigation: the server sends the browser on to Google and back.
+export const googleStartURL = () =>
+  `/api/v1/auth/google/start?timezone=${encodeURIComponent(
+    Intl.DateTimeFormat().resolvedOptions().timeZone,
+  )}`;
+
+// Why the Google callback sent the browser back to sign in (?error=).
+export const googleErrors: Record<string, string> = {
+  google_unverified:
+    "Google hasn't verified the email on that account, so it can't be used to sign in.",
+  google_unavailable:
+    "Google sign-in isn't available right now. Use your email and password.",
+  google_failed: "Google sign-in didn't finish. Please try again.",
+};
 
 export const logout = () => request<void>("POST", "/auth/logout");
 

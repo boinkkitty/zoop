@@ -57,6 +57,27 @@ test("sign up, land in the app, sign out, sign in again", async ({ page }) => {
   await expect(page.getByText(email)).toBeVisible();
 });
 
+test("sign-in and signup offer Google, carrying the browser's timezone", async ({
+  page,
+}) => {
+  const start = `/api/v1/auth/google/start?timezone=${encodeURIComponent(timezone)}`;
+  for (const screen of ["/signin", "/signup"]) {
+    await page.goto(screen);
+    await expect(
+      page.getByRole("link", { name: "Continue with Google" }),
+    ).toHaveAttribute("href", start);
+  }
+});
+
+test("a refused Google sign-in is explained on the sign-in screen", async ({
+  page,
+}) => {
+  await page.goto("/signin?error=google_unverified");
+  await expect(page.getByRole("alert")).toHaveText(
+    "Google hasn't verified the email on that account, so it can't be used to sign in.",
+  );
+});
+
 test("the auth screens never load the app chunk", async ({ page }) => {
   const scripts = recordScripts(page);
   await page.goto("/signin");

@@ -19,10 +19,14 @@ import (
 	"github.com/boinkkitty/zoop/internal/app"
 	"github.com/boinkkitty/zoop/internal/clock"
 	"github.com/boinkkitty/zoop/internal/errreport"
+	"github.com/boinkkitty/zoop/internal/google"
 	"github.com/boinkkitty/zoop/internal/logging"
 	"github.com/boinkkitty/zoop/internal/mail"
 	"github.com/boinkkitty/zoop/web"
 )
+
+// sweepEvery is how often expired sessions and rate-limit rows are deleted.
+const sweepEvery = 15 * time.Minute
 
 func main() {
 	slog.SetDefault(logging.New(os.Stdout))
@@ -56,22 +60,31 @@ func run() error {
 	}
 	defer reports.Flush(2 * time.Second)
 
+	googleCfg, err := googleConfig()
+	if err != nil {
+		return err
+	}
+
 	pool, err := pgxpool.New(ctx, dbURL)
 	if err != nil {
 		return fmt.Errorf("open database: %w", err)
 	}
 	defer pool.Close()
 
+	deps := app.Deps{
+		DB:     pool,
+		Clock:  clock.System{},
+		Mailer: mail.Unconfigured{},
+		Assets: web.Dist(),
+		Google: googleCfg,
+		Logs:   os.Stdout,
+		Sentry: reports,
+	}
+	go app.KeepSwept(ctx, deps, sweepEvery)
+
 	srv := &http.Server{
-		Addr: ":" + port,
-		Handler: app.New(app.Deps{
-			DB:     pool,
-			Clock:  clock.System{},
-			Mailer: mail.Unconfigured{},
-			Assets: web.Dist(),
-			Logs:   os.Stdout,
-			Sentry: reports,
-		}),
+		Addr:              ":" + port,
+		Handler:           app.New(deps),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 
@@ -89,4 +102,24 @@ func run() error {
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	return srv.Shutdown(shutdownCtx)
+}
+
+// googleConfig reads Google sign-in's OAuth client from the environment. With no
+// GOOGLE_CLIENT_ID, Google sign-in is off and the button sends people back to sign in.
+func googleConfig() (*google.Config, error) {
+	id := os.Getenv("GOOGLE_CLIENT_ID")
+	if id == "" {
+		slog.Warn("GOOGLE_CLIENT_ID is not set: Google sign-in is off")
+		return nil, nil
+	}
+	cfg := &google.Config{
+		Issuer:       google.Issuer,
+		ClientID:     id,
+		ClientSecret: os.Getenv("GOOGLE_CLIENT_SECRET"),
+		RedirectURL:  os.Getenv("GOOGLE_REDIRECT_URL"), // https://<host>/api/v1/auth/google/callback
+	}
+	if cfg.ClientSecret == "" || cfg.RedirectURL == "" {
+		return nil, errors.New("GOOGLE_CLIENT_ID is set, so GOOGLE_CLIENT_SECRET and GOOGLE_REDIRECT_URL must be too")
+	}
+	return cfg, nil
 }

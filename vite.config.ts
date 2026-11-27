@@ -32,6 +32,5 @@ export default defineConfig({
   test: {
     root: ".",
     include: ["web/src/**/*.test.ts", "web/src/**/*.test.tsx"],
-    passWithNoTests: true,
   },
 });

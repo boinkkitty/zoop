@@ -1,0 +1,10 @@
+{
+  "notebook": "my-journal",
+  "doc": {
+    "type": "doc",
+    "content": [
+      { "type": "paragraph", "content": [{ "type": "text", "text": "" }] }
+    ]
+  },
+  "why": "ProseMirror never stores empty text nodes"
+}

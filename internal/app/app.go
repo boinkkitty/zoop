@@ -3,18 +3,24 @@
 package app
 
 import (
+	"context"
 	"io"
 	"io/fs"
+	"log/slog"
 	"net/http"
+	"time"
 
 	"github.com/getsentry/sentry-go"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/boinkkitty/zoop/internal/auth"
 	"github.com/boinkkitty/zoop/internal/clock"
+	"github.com/boinkkitty/zoop/internal/google"
 	"github.com/boinkkitty/zoop/internal/logging"
 	"github.com/boinkkitty/zoop/internal/mail"
+	"github.com/boinkkitty/zoop/internal/pages"
 	"github.com/boinkkitty/zoop/internal/postgres"
+	"github.com/boinkkitty/zoop/internal/ratelimit"
 	"github.com/boinkkitty/zoop/internal/server"
 )
 
@@ -26,18 +32,57 @@ type Deps struct {
 	Assets fs.FS          // the built frontend; must contain index.html
 	Logs   io.Writer      // where JSON log lines go; nil discards them
 	Sentry *sentry.Client // from errreport.NewClient; nil turns reporting off
+	Google *google.Config // nil when Google sign-in isn't configured
+}
+
+// Swept is how many expired rows one Sweep deleted.
+type Swept struct {
+	Sessions   int64
+	RateLimits int64
+}
+
+// Sweep deletes what has expired by the Clock: sessions and rate-limit rows.
+func Sweep(ctx context.Context, d Deps) (Swept, error) {
+	sessions, rateLimits, err := postgres.SweepExpired(ctx, d.DB, d.Clock.Now())
+	return Swept{Sessions: sessions, RateLimits: rateLimits}, err
+}
+
+// KeepSwept runs Sweep now and then every interval until ctx ends, so no separate cron is needed.
+// A failed sweep is logged and retried on the next tick.
+func KeepSwept(ctx context.Context, d Deps, every time.Duration) {
+	tick := time.NewTicker(every)
+	defer tick.Stop()
+	for {
+		if swept, err := Sweep(ctx, d); err != nil {
+			slog.Error("sweep expired rows", "err", err)
+		} else {
+			slog.Info("swept expired rows", "sessions", swept.Sessions, "rateLimits", swept.RateLimits)
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-tick.C:
+		}
+	}
 }
 
 // New wires the whole app and returns its root handler.
 func New(d Deps) http.Handler {
+	var g auth.GoogleProvider // left nil, not a typed nil, when Google isn't configured
+	if d.Google != nil {
+		g = google.New(*d.Google, d.Clock)
+	}
 	logs := d.Logs
 	if logs == nil {
 		logs = io.Discard
 	}
+	limits := ratelimit.New(postgres.NewRateLimitStore(d.DB), d.Clock)
 	return server.New(server.Deps{
 		Log:    logging.New(logs),
 		Sentry: d.Sentry,
-		Auth:   auth.New(postgres.NewAuthStore(d.DB), d.Clock),
+		Auth:   auth.New(postgres.NewAuthStore(d.DB), d.Clock, limits, g),
+		Pages:  pages.New(postgres.NewPageStore(d.DB), d.Clock),
+		Limits: limits,
 		Ping:   postgres.Ping(d.DB),
 		Assets: d.Assets,
 	})

@@ -8,6 +8,7 @@ import {
 } from "@tanstack/react-router";
 import { getMe, isUnauthenticated } from "./api";
 import { AuthScreen } from "./auth/AuthScreen";
+import { pageQuery } from "./page/queries";
 
 export const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: false, staleTime: 60_000 } },
@@ -44,7 +45,12 @@ const indexRoute = createRoute({
 const signinRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/signin",
-  component: () => <AuthScreen mode="signin" />,
+  validateSearch: (search: Record<string, unknown>): { error?: string } =>
+    typeof search.error === "string" ? { error: search.error } : {},
+  component: function SignIn() {
+    const { error } = signinRoute.useSearch();
+    return <AuthScreen mode="signin" googleError={error} />;
+  },
 });
 
 const signupRoute = createRoute({
@@ -58,6 +64,8 @@ const dayRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/day/$day/$notebook",
   beforeLoad: ({ context }) => requireMe(context.queryClient),
+  loader: ({ context, params }) =>
+    context.queryClient.ensureQueryData(pageQuery(params.day, params.notebook)),
 }).lazy(() => import("./journal/JournalRoute").then((m) => m.Route));
 
 // Unknown paths go home, which sends the visitor to sign in or to today.

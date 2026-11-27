@@ -1,0 +1,15 @@
+{
+  "notebook": "my-journal",
+  "doc": {
+    "type": "doc",
+    "content": [
+      { "type": "paragraph", "content": [{ "type": "text", "text": "Rain" }] },
+      { "type": "paragraph" },
+      {
+        "type": "paragraph",
+        "content": [{ "type": "text", "text": "Then sun, briefly." }]
+      }
+    ]
+  },
+  "plainText": "Rain\n\nThen sun, briefly."
+}

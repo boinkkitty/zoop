@@ -15,11 +15,15 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/boinkkitty/zoop/internal/auth"
+	"github.com/boinkkitty/zoop/internal/pages"
+	"github.com/boinkkitty/zoop/internal/ratelimit"
 )
 
 // Deps is what the router drives. internal/app builds it.
 type Deps struct {
 	Auth   *auth.Service
+	Pages  *pages.Service
+	Limits *ratelimit.RateLimiter
 	Ping   func(context.Context) error // backs /api/healthz
 	Assets fs.FS                       // the built frontend; must contain index.html
 	Log    *slog.Logger                // allowlisting; see internal/logging
@@ -46,9 +50,13 @@ func New(d Deps) http.Handler {
 			v1.Post("/auth/signup", signup(authn, rep))
 			v1.Post("/auth/login", login(authn, rep))
 			v1.Post("/auth/logout", logout(authn, rep))
+			v1.Get("/auth/google/start", googleStart(authn, rep))
+			v1.Get("/auth/google/callback", googleCallback(authn, rep))
 			v1.Group(func(signedIn chi.Router) {
-				signedIn.Use(requireUser(authn, rep))
+				signedIn.Use(requireUser(authn, rep), limitPerUser(d.Limits, rep))
 				signedIn.Get("/me", getMe(authn, rep))
+				signedIn.Get("/pages/{day}/{notebook}", getPage(d.Pages, rep))
+				signedIn.Put("/pages/{day}/{notebook}", putPage(d.Pages, rep))
 			})
 		})
 		api.NotFound(func(w http.ResponseWriter, r *http.Request) {

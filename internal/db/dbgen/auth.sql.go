@@ -12,6 +12,22 @@ import (
 	"github.com/google/uuid"
 )
 
+const createGoogleIdentity = `-- name: CreateGoogleIdentity :exec
+INSERT INTO auth_identities (user_id, provider, subject, created_at)
+VALUES ($1, 'google', $2, $3)
+`
+
+type CreateGoogleIdentityParams struct {
+	UserID  uuid.UUID
+	Subject string
+	Now     time.Time
+}
+
+func (q *Queries) CreateGoogleIdentity(ctx context.Context, arg CreateGoogleIdentityParams) error {
+	_, err := q.db.Exec(ctx, createGoogleIdentity, arg.UserID, arg.Subject, arg.Now)
+	return err
+}
+
 const createPasswordIdentity = `-- name: CreatePasswordIdentity :exec
 INSERT INTO auth_identities (user_id, provider, subject, password_hash, created_at)
 VALUES ($1, 'password', $2, $3, $4)
@@ -82,6 +98,53 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (uuid.UU
 	return id, err
 }
 
+const createVerifiedUser = `-- name: CreateVerifiedUser :one
+INSERT INTO users (email, email_verified_at, first_day, timezone, created_at, updated_at)
+VALUES ($1, $2::timestamptz, $3, $4, $2, $2)
+ON CONFLICT (email) DO NOTHING
+RETURNING id
+`
+
+type CreateVerifiedUserParams struct {
+	Email    string
+	Now      time.Time
+	FirstDay time.Time
+	Timezone string
+}
+
+func (q *Queries) CreateVerifiedUser(ctx context.Context, arg CreateVerifiedUserParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, createVerifiedUser,
+		arg.Email,
+		arg.Now,
+		arg.FirstDay,
+		arg.Timezone,
+	)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const deleteExpiredSessions = `-- name: DeleteExpiredSessions :execrows
+DELETE FROM sessions WHERE expires_at <= $1
+`
+
+func (q *Queries) DeleteExpiredSessions(ctx context.Context, now time.Time) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteExpiredSessions, now)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const deletePasswordIdentity = `-- name: DeletePasswordIdentity :exec
+DELETE FROM auth_identities WHERE user_id = $1 AND provider = 'password'
+`
+
+func (q *Queries) DeletePasswordIdentity(ctx context.Context, userID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, deletePasswordIdentity, userID)
+	return err
+}
+
 const deleteSession = `-- name: DeleteSession :exec
 DELETE FROM sessions WHERE token_hash = $1
 `
@@ -89,6 +152,29 @@ DELETE FROM sessions WHERE token_hash = $1
 func (q *Queries) DeleteSession(ctx context.Context, tokenHash []byte) error {
 	_, err := q.db.Exec(ctx, deleteSession, tokenHash)
 	return err
+}
+
+const deleteUserSessions = `-- name: DeleteUserSessions :exec
+DELETE FROM sessions WHERE user_id = $1
+`
+
+func (q *Queries) DeleteUserSessions(ctx context.Context, userID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, deleteUserSessions, userID)
+	return err
+}
+
+const getGoogleLogin = `-- name: GetGoogleLogin :one
+SELECT u.id
+FROM users u
+JOIN auth_identities i ON i.user_id = u.id AND i.provider = 'google'
+WHERE i.subject = $1 AND u.deleted_at IS NULL
+`
+
+func (q *Queries) GetGoogleLogin(ctx context.Context, subject string) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, getGoogleLogin, subject)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
 }
 
 const getLiveSession = `-- name: GetLiveSession :one
@@ -170,6 +256,22 @@ func (q *Queries) GetUser(ctx context.Context, id uuid.UUID) (GetUserRow, error)
 	return i, err
 }
 
+const getUserByEmail = `-- name: GetUserByEmail :one
+SELECT id, email_verified_at FROM users WHERE email = $1 AND deleted_at IS NULL
+`
+
+type GetUserByEmailRow struct {
+	ID              uuid.UUID
+	EmailVerifiedAt *time.Time
+}
+
+func (q *Queries) GetUserByEmail(ctx context.Context, email string) (GetUserByEmailRow, error) {
+	row := q.db.QueryRow(ctx, getUserByEmail, email)
+	var i GetUserByEmailRow
+	err := row.Scan(&i.ID, &i.EmailVerifiedAt)
+	return i, err
+}
+
 const listSignInMethods = `-- name: ListSignInMethods :many
 SELECT provider FROM auth_identities WHERE user_id = $1 ORDER BY provider
 `
@@ -207,4 +309,23 @@ type RenewSessionParams struct {
 func (q *Queries) RenewSession(ctx context.Context, arg RenewSessionParams) error {
 	_, err := q.db.Exec(ctx, renewSession, arg.Now, arg.ExpiresAt, arg.ID)
 	return err
+}
+
+const verifyUnverifiedEmail = `-- name: VerifyUnverifiedEmail :one
+UPDATE users SET email_verified_at = $1::timestamptz, updated_at = $1
+WHERE id = $2 AND email_verified_at IS NULL
+RETURNING id
+`
+
+type VerifyUnverifiedEmailParams struct {
+	Now time.Time
+	ID  uuid.UUID
+}
+
+// Only matches while the email is still unverified, so a takeover never removes a verified password.
+func (q *Queries) VerifyUnverifiedEmail(ctx context.Context, arg VerifyUnverifiedEmailParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, verifyUnverifiedEmail, arg.Now, arg.ID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
 }

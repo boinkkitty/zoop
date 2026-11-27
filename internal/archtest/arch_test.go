@@ -18,6 +18,7 @@ var core = []string{
 	"internal/auth/password",
 	"internal/days",
 	"internal/pages",
+	"internal/ratelimit",
 }
 
 // forbidden are import path prefixes that belong to adapters, never the core.
@@ -26,7 +27,10 @@ var forbidden = []string{
 	"database/sql",
 	"github.com/go-chi/",
 	"github.com/jackc/",
+	"golang.org/x/oauth2",
+	"github.com/coreos/go-oidc/",
 	module + "internal/db",
+	module + "internal/google",
 	module + "internal/postgres",
 	module + "internal/server",
 	module + "internal/app",

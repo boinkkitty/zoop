@@ -1,0 +1,5 @@
+{
+  "notebook": "my-journal",
+  "doc": { "type": "paragraph", "content": [{ "type": "text", "text": "hi" }] },
+  "why": "the root must be a doc"
+}
