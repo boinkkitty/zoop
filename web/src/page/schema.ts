@@ -5,8 +5,9 @@ import { type AnyExtension, getSchema } from "@tiptap/core";
 import Document from "@tiptap/extension-document";
 import Paragraph from "@tiptap/extension-paragraph";
 import Text from "@tiptap/extension-text";
-import type { Node as PMNode } from "@tiptap/pm/model";
+import type { Node as PMNode, Schema } from "@tiptap/pm/model";
 import type { Doc } from "../api";
+import { isNotebook, NOTEBOOKS, type Notebook } from "./notebooks";
 
 // Bump together with pages.SchemaVersion and testdata/page-docs/schema-version.json.
 export const SCHEMA_VERSION = 1;
@@ -15,21 +16,32 @@ export type { Doc } from "../api";
 
 export const EMPTY_DOC: Doc = { type: "doc", content: [{ type: "paragraph" }] };
 
-// My Journal's grammar: the Title paragraph, then any blocks. The Title's bold is CSS.
-const PageDocument = Document.extend({ content: "paragraph block*" });
+// Each Notebook's grammar, as on the server (internal/pages/doc.go). My Journal starts with
+// the Title, a plain paragraph whose bold is CSS. I Learned has no Title.
+const grammars: Record<Notebook, string> = {
+  "my-journal": "paragraph block*",
+  "i-learned": "block+",
+};
 
-// The document extensions only: editor behaviour (placeholders, history) is added by the editor.
-export const documentExtensions: AnyExtension[] = [
-  PageDocument,
-  Paragraph,
-  Text,
+// The nodes and marks both Notebooks share.
+const contentExtensions: AnyExtension[] = [Paragraph, Text];
+
+// documentExtensions are one Notebook's document extensions only: editor behaviour
+// (placeholders, history) is added by the editor.
+export const documentExtensions = (notebook: Notebook): AnyExtension[] => [
+  Document.extend({ content: grammars[notebook] }),
+  ...contentExtensions,
 ];
 
-export const pageSchema = getSchema(documentExtensions);
+const schemas = Object.fromEntries(
+  NOTEBOOKS.map(({ slug }) => [slug, getSchema(documentExtensions(slug))]),
+) as Record<Notebook, Schema>;
 
-// parseDoc returns the ProseMirror node for json if it's a valid Page, or null.
+// parseDoc returns the ProseMirror node for json if it's a valid Page in notebook, or null.
 // It also refuses anything ProseMirror would silently drop, so what's sent is what's stored.
-export function parseDoc(json: unknown): PMNode | null {
+export function parseDoc(notebook: string, json: unknown): PMNode | null {
+  if (!isNotebook(notebook)) return null;
+  const pageSchema = schemas[notebook];
   try {
     const node = pageSchema.nodeFromJSON(json);
     if (node.type !== pageSchema.topNodeType) return null;

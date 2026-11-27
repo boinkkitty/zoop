@@ -9,6 +9,7 @@ import { PageEditor } from "../page/PageEditor";
 import { pageQuery } from "../page/queries";
 import { meQuery } from "../router";
 import styles from "./JournalRoute.module.css";
+import { NotebookIndex } from "./NotebookIndex";
 
 export const Route = createLazyRoute("/day/$day/$notebook")({
   component: JournalRoute,
@@ -67,6 +68,7 @@ function JournalRoute() {
           page={page}
           owner={me.email}
         />
+        <NotebookIndex day={page.day} active={page.notebook} />
       </article>
     </main>
   );

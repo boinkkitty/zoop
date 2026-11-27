@@ -1,0 +1,18 @@
+{
+  "notebook": "i-learned",
+  "doc": {
+    "type": "doc",
+    "content": [
+      { "type": "paragraph" },
+      {
+        "type": "paragraph",
+        "content": [{ "type": "text", "text": "Octopuses have three hearts." }]
+      },
+      {
+        "type": "paragraph",
+        "content": [{ "type": "text", "text": "Honey never spoils." }]
+      }
+    ]
+  },
+  "plainText": "\nOctopuses have three hearts.\nHoney never spoils."
+}

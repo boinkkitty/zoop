@@ -1,20 +1,22 @@
 import { useQueryClient } from "@tanstack/react-query";
+import { useRouter } from "@tanstack/react-router";
 import type { Editor } from "@tiptap/core";
 import { Placeholder, UndoRedo } from "@tiptap/extensions";
 import { EditorContent, useEditor } from "@tiptap/react";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import type { Page } from "../api";
 import { type Notice, NoticePill } from "../notices/NoticePill";
+import type { Notebook } from "./notebooks";
 import styles from "./PageEditor.module.css";
 import { pageQuery } from "./queries";
 import { createPageSaver, type PageSaver, type SaverStatus } from "./saver";
 import { type Doc, documentExtensions } from "./schema";
 
-type Words = { title: string; body: string };
-const myJournal: Words = { title: "Title", body: "Write about your day…" };
-const placeholders: Record<string, Words> = {
-  "my-journal": myJournal,
-  "i-learned": { title: "What did you learn today?", body: "" },
+// Only My Journal has a Title: its first line, bold by style. I Learned is plain lines.
+type Words = { first: string; body: string; titled: boolean };
+const notebookWords: Record<Notebook, Words> = {
+  "my-journal": { first: "Title", body: "Write about your day…", titled: true },
+  "i-learned": { first: "What did you learn today?", body: "", titled: false },
 };
 
 // The editor for one Page, with its Notices. Mount it with a key per Page so each gets its own saver.
@@ -43,13 +45,13 @@ export function PageEditor({ page, owner }: { page: Page; owner: string }) {
   useFlushWhenLeaving(saver);
   const status = useSyncExternalStore(saver.subscribe, saver.status);
 
-  const words = placeholders[page.notebook] ?? myJournal;
+  const words = notebookWords[page.notebook];
   const editor = useEditor({
     extensions: [
-      ...documentExtensions,
+      ...documentExtensions(page.notebook),
       UndoRedo,
       Placeholder.configure({
-        placeholder: ({ pos }) => (pos === 0 ? words.title : ""),
+        placeholder: ({ pos }) => (pos === 0 ? words.first : ""),
         showOnlyCurrent: false,
       }),
     ],
@@ -61,7 +63,9 @@ export function PageEditor({ page, owner }: { page: Page; owner: string }) {
     immediatelyRender: true,
     editorProps: {
       attributes: {
-        class: styles.prose ?? "",
+        class: [styles.prose, words.titled && styles.titled]
+          .filter(Boolean)
+          .join(" "),
         "aria-label": "Page",
         "data-body-placeholder": words.body,
       },
@@ -80,7 +84,9 @@ export function PageEditor({ page, owner }: { page: Page; owner: string }) {
 }
 
 // Saves what's pending when the page is hidden, unloaded, or left for another route.
+// A route change (another Notebook, back/forward) flushes before the next route loads.
 function useFlushWhenLeaving(saver: PageSaver) {
+  const router = useRouter();
   useEffect(() => {
     const onVisibility = () => {
       if (document.visibilityState === "hidden") saver.flush();
@@ -88,12 +94,16 @@ function useFlushWhenLeaving(saver: PageSaver) {
     const onPageHide = () => saver.flushOnUnload();
     document.addEventListener("visibilitychange", onVisibility);
     window.addEventListener("pagehide", onPageHide);
+    const unsubscribe = router.subscribe("onBeforeNavigate", () =>
+      saver.flush(),
+    );
     return () => {
       document.removeEventListener("visibilitychange", onVisibility);
       window.removeEventListener("pagehide", onPageHide);
-      saver.dispose(); // route change or another Page
+      unsubscribe();
+      saver.dispose(); // another Page
     };
-  }, [saver]);
+  }, [saver, router]);
 }
 
 function useSaverNotices(saver: PageSaver, status: SaverStatus): Notice[] {

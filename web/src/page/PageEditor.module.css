@@ -17,8 +17,8 @@
   margin: 0;
 }
 
-/* The Title: the first line, bold by style. It is never a stored mark. */
-.prose > p:first-child {
+/* My Journal's Title: the first line, bold by style. It is never a stored mark. */
+.titled > p:first-child {
   font-size: 21px;
   font-weight: 650;
   letter-spacing: -0.015em;

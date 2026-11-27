@@ -31,12 +31,29 @@ type node struct {
 	Marks   json.RawMessage `json:"marks"`
 }
 
+// grammar is the shape of one Notebook's document.
+type grammar struct {
+	// titled: the first block is the Day's Title, always a plain paragraph (`paragraph block*`).
+	// Otherwise any blocks will do (`block+`).
+	titled bool
+}
+
+// grammars are the v1 Notebooks' documents, by slug. The client's (web/src/page/schema.ts) match.
+var grammars = map[string]grammar{
+	"my-journal": {titled: true},
+	"i-learned":  {titled: false},
+}
+
 // ParseDoc checks that doc is a Page for notebook in the current schema and returns its plain text:
 // formatting removed, one line per block.
 //
-// The v1 grammar so far is `doc: paragraph block*`, where a block is a paragraph holding text.
-// In My Journal the first paragraph is the Title; its bold is CSS, never a stored mark.
+// A block so far is a paragraph holding text. My Journal is `paragraph block*`: its first paragraph
+// is the Title, whose bold is CSS, never a stored mark. I Learned is `block+`, with no Title.
 func ParseDoc(notebook string, doc json.RawMessage) (string, error) {
+	g, ok := grammars[notebook]
+	if !ok {
+		return "", invalid("there's no Notebook %q", notebook)
+	}
 	dec := json.NewDecoder(bytes.NewReader(doc))
 	dec.DisallowUnknownFields()
 	var root node
@@ -47,10 +64,16 @@ func ParseDoc(notebook string, doc json.RawMessage) (string, error) {
 		return "", invalid("the root must be a plain doc node")
 	}
 	if root.Content == nil || len(*root.Content) == 0 {
-		return "", invalid("a Page starts with its Title paragraph")
+		if g.titled {
+			return "", invalid("a Page starts with its Title paragraph")
+		}
+		return "", invalid("a Page has at least one block")
 	}
 	lines := make([]string, 0, len(*root.Content))
 	for i, block := range *root.Content {
+		if i == 0 && g.titled && block.Type != "paragraph" {
+			return "", invalid("the Title is a plain paragraph, not %q", block.Type)
+		}
 		line, err := paragraph(block)
 		if err != nil {
 			return "", invalid("block %d: %v", i, err)
