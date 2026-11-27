@@ -15,6 +15,7 @@ import {
 } from "./auth/EmailLinkScreens";
 import { isNotebook } from "./page/notebooks";
 import { pageQuery } from "./page/queries";
+import { PrivacyPage } from "./privacy/PrivacyPage";
 
 export const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: false, staleTime: 60_000 } },
@@ -94,6 +95,13 @@ const forgotRoute = createRoute({
   component: ForgotScreen,
 });
 
+// Public: readable before signing in, and the URL Google's OAuth consent screen shows.
+const privacyRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/privacy",
+  component: PrivacyPage,
+});
+
 // Lazy, so the auth screens never download the signed-in app (or, later, the editor).
 // A Page that isn't there (an unknown Notebook, a Day outside the journal) goes home, like unknown paths.
 const dayRoute = createRoute({
@@ -133,6 +141,7 @@ export const router = createRouter({
     verifyRoute,
     resetRoute,
     forgotRoute,
+    privacyRoute,
     dayRoute,
     notFoundRoute,
   ]),

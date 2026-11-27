@@ -1,0 +1,49 @@
+.screen {
+  min-height: 100vh;
+  padding: 48px 24px;
+  background: var(--color-desk);
+}
+
+.sheet {
+  max-width: 620px;
+  margin: 0 auto;
+  padding: 40px 44px;
+  background: var(--color-sheet);
+  border-radius: var(--radius-sheet);
+  box-shadow: var(--shadow-sheet);
+  line-height: 1.6;
+}
+
+.sheet h1 {
+  margin: 0 0 4px;
+  font-size: 26px;
+  font-weight: 700;
+}
+
+.sheet h2 {
+  margin: 28px 0 6px;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.sheet p,
+.sheet ul {
+  margin: 0 0 10px;
+}
+
+.sheet ul {
+  padding-left: 20px;
+}
+
+.lede {
+  color: var(--color-muted);
+}
+
+.back {
+  margin-top: 32px;
+  font-size: 14px;
+}
+
+.back a {
+  color: var(--color-ink);
+}
