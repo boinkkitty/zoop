@@ -45,7 +45,12 @@ const indexRoute = createRoute({
 const signinRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/signin",
-  component: () => <AuthScreen mode="signin" />,
+  validateSearch: (search: Record<string, unknown>): { error?: string } =>
+    typeof search.error === "string" ? { error: search.error } : {},
+  component: function SignIn() {
+    const { error } = signinRoute.useSearch();
+    return <AuthScreen mode="signin" googleError={error} />;
+  },
 });
 
 const signupRoute = createRoute({

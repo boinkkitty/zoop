@@ -34,6 +34,8 @@ func New(d Deps) http.Handler {
 			v1.Post("/auth/signup", signup(authn))
 			v1.Post("/auth/login", login(authn))
 			v1.Post("/auth/logout", logout(authn))
+			v1.Get("/auth/google/start", googleStart(authn))
+			v1.Get("/auth/google/callback", googleCallback(authn))
 			v1.Group(func(signedIn chi.Router) {
 				signedIn.Use(requireUser(authn))
 				signedIn.Get("/me", getMe(authn))
