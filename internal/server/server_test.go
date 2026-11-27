@@ -12,9 +12,9 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/boinkkitty/zoop/internal/app"
 	"github.com/boinkkitty/zoop/internal/clock"
 	"github.com/boinkkitty/zoop/internal/mail/mailtest"
-	"github.com/boinkkitty/zoop/internal/server"
 	"github.com/boinkkitty/zoop/internal/testenv"
 )
 
@@ -25,7 +25,7 @@ const shell = `<!doctype html><title>Zoop</title><div id="root"></div>`
 // newApp builds the real router against this package's migrated test database.
 func newApp(t *testing.T) http.Handler {
 	t.Helper()
-	return server.New(server.Deps{
+	return app.New(app.Deps{
 		DB:     testenv.Pool(t),
 		Clock:  clock.NewFake(time.Date(2026, 11, 25, 9, 0, 0, 0, time.UTC)),
 		Mailer: &mailtest.Fake{},
@@ -74,7 +74,7 @@ func TestHealthzFailsFastWhenPostgresHangs(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(pool.Close)
-	app := server.New(server.Deps{
+	app := app.New(app.Deps{
 		DB:     pool,
 		Clock:  clock.NewFake(time.Date(2026, 11, 25, 9, 0, 0, 0, time.UTC)),
 		Mailer: &mailtest.Fake{},

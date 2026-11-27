@@ -13,13 +13,10 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/boinkkitty/zoop/internal/auth/password"
 	"github.com/boinkkitty/zoop/internal/clock"
 	"github.com/boinkkitty/zoop/internal/days"
-	"github.com/boinkkitty/zoop/internal/db/dbgen"
 )
 
 const (
@@ -40,15 +37,14 @@ type ValidationError struct{ Message string }
 
 func (e *ValidationError) Error() string { return e.Message }
 
-// Service is the auth module. Time comes from its Clock.
+// Service is the auth module. It persists through its Store and tells time by its Clock.
 type Service struct {
-	pool  *pgxpool.Pool
-	q     *dbgen.Queries
+	store Store
 	clock clock.Clock
 }
 
-func New(pool *pgxpool.Pool, c clock.Clock) *Service {
-	return &Service{pool: pool, q: dbgen.New(pool), clock: c}
+func New(store Store, c clock.Clock) *Service {
+	return &Service{store: store, clock: c}
 }
 
 // Session is a signed-in device.
@@ -77,33 +73,17 @@ func (s *Service) Signup(ctx context.Context, email, plain, timezone string) (Se
 		return Session{}, err
 	}
 	now := s.clock.Now()
-
-	tx, err := s.pool.Begin(ctx)
+	token, first, err := newSession(now)
 	if err != nil {
 		return Session{}, err
 	}
-	defer tx.Rollback(ctx)
-	q := s.q.WithTx(tx)
-
-	userID, err := q.CreateUser(ctx, dbgen.CreateUserParams{
-		Email: email, FirstDay: days.Today(now, loc), Timezone: timezone, Now: now,
-	})
-	if errors.Is(err, pgx.ErrNoRows) {
-		return Session{}, ErrEmailTaken
-	}
-	if err != nil {
-		return Session{}, fmt.Errorf("create user: %w", err)
-	}
-	if err := q.CreatePasswordIdentity(ctx, dbgen.CreatePasswordIdentityParams{
-		UserID: userID, Subject: email, PasswordHash: &hash, Now: now,
-	}); err != nil {
-		return Session{}, fmt.Errorf("create password identity: %w", err)
-	}
-	sess, err := createSession(ctx, q, userID, now)
+	userID, err := s.store.CreateAccount(ctx, NewAccount{
+		Email: email, FirstDay: days.Today(now, loc), Timezone: timezone, PasswordHash: hash, CreatedAt: now,
+	}, first)
 	if err != nil {
 		return Session{}, err
 	}
-	return sess, tx.Commit(ctx)
+	return Session{Token: token, UserID: userID, ExpiresAt: first.ExpiresAt, Renewed: true}, nil
 }
 
 // Login signs a new device in with an email and password.
@@ -112,8 +92,8 @@ func (s *Service) Login(ctx context.Context, email, plain string) (Session, erro
 	if len(plain) > password.MaxBytes {
 		return Session{}, ErrBadLogin
 	}
-	row, err := s.q.GetPasswordLogin(ctx, normalizeEmail(email))
-	if errors.Is(err, pgx.ErrNoRows) {
+	userID, hash, err := s.store.PasswordLogin(ctx, normalizeEmail(email))
+	if errors.Is(err, ErrNotFound) {
 		// Spend the same time as a real check, so timing doesn't reveal it either.
 		_, _ = password.Verify(dummyHash, plain)
 		return Session{}, ErrBadLogin
@@ -121,14 +101,21 @@ func (s *Service) Login(ctx context.Context, email, plain string) (Session, erro
 	if err != nil {
 		return Session{}, err
 	}
-	ok, err := password.Verify(*row.PasswordHash, plain)
+	ok, err := password.Verify(hash, plain)
 	if err != nil {
 		return Session{}, fmt.Errorf("verify stored hash: %w", err)
 	}
 	if !ok {
 		return Session{}, ErrBadLogin
 	}
-	return createSession(ctx, s.q, row.ID, s.clock.Now())
+	token, sess, err := newSession(s.clock.Now())
+	if err != nil {
+		return Session{}, err
+	}
+	if err := s.store.CreateSession(ctx, userID, sess); err != nil {
+		return Session{}, err
+	}
+	return Session{Token: token, UserID: userID, ExpiresAt: sess.ExpiresAt, Renewed: true}, nil
 }
 
 // dummyHash is checked when there's no account, so a miss costs as much as a wrong password.
@@ -146,8 +133,8 @@ func (s *Service) Authenticate(ctx context.Context, token string) (Session, erro
 		return Session{}, ErrNoSession
 	}
 	now := s.clock.Now()
-	row, err := s.q.GetLiveSession(ctx, dbgen.GetLiveSessionParams{TokenHash: hashToken(token), Now: now})
-	if errors.Is(err, pgx.ErrNoRows) {
+	row, err := s.store.LiveSession(ctx, hashToken(token), now)
+	if errors.Is(err, ErrNotFound) {
 		return Session{}, ErrNoSession
 	}
 	if err != nil {
@@ -157,7 +144,7 @@ func (s *Service) Authenticate(ctx context.Context, token string) (Session, erro
 	if now.Sub(row.LastSeenAt) >= RenewEvery {
 		sess.ExpiresAt = now.Add(SessionLifetime)
 		sess.Renewed = true
-		if err := s.q.RenewSession(ctx, dbgen.RenewSessionParams{ID: row.ID, Now: now, ExpiresAt: sess.ExpiresAt}); err != nil {
+		if err := s.store.RenewSession(ctx, row.ID, now, sess.ExpiresAt); err != nil {
 			return Session{}, err
 		}
 	}
@@ -169,7 +156,7 @@ func (s *Service) Logout(ctx context.Context, token string) error {
 	if token == "" {
 		return nil
 	}
-	return s.q.DeleteSession(ctx, hashToken(token))
+	return s.store.DeleteSession(ctx, hashToken(token))
 }
 
 // Account is what a signed-in user can see about themselves.
@@ -187,11 +174,10 @@ type Account struct {
 
 // Account describes userID as of now.
 func (s *Service) Account(ctx context.Context, userID uuid.UUID) (Account, error) {
-	u, err := s.q.GetUser(ctx, userID)
-	if err != nil {
-		return Account{}, err
+	u, err := s.store.User(ctx, userID)
+	if errors.Is(err, ErrNotFound) {
+		return Account{}, ErrNoSession
 	}
-	methods, err := s.q.ListSignInMethods(ctx, userID)
 	if err != nil {
 		return Account{}, err
 	}
@@ -209,23 +195,18 @@ func (s *Service) Account(ctx context.Context, userID uuid.UUID) (Account, error
 		FirstDay:        u.FirstDay,
 		Today:           days.Today(now, loc),
 		GraceUntil:      days.GraceUntil(now, loc),
-		SignInMethods:   methods,
+		SignInMethods:   u.SignInMethods,
 	}, nil
 }
 
-func createSession(ctx context.Context, q *dbgen.Queries, userID uuid.UUID, now time.Time) (Session, error) {
+// newSession makes a fresh random token, returning it and the session to store under its hash.
+func newSession(now time.Time) (string, NewSession, error) {
 	raw := make([]byte, 32)
 	if _, err := rand.Read(raw); err != nil {
-		return Session{}, err
+		return "", NewSession{}, err
 	}
 	token := base64.RawURLEncoding.EncodeToString(raw)
-	expires := now.Add(SessionLifetime)
-	if err := q.CreateSession(ctx, dbgen.CreateSessionParams{
-		TokenHash: hashToken(token), UserID: userID, Now: now, ExpiresAt: expires,
-	}); err != nil {
-		return Session{}, fmt.Errorf("create session: %w", err)
-	}
-	return Session{Token: token, UserID: userID, ExpiresAt: expires, Renewed: true}, nil
+	return token, NewSession{TokenHash: hashToken(token), CreatedAt: now, ExpiresAt: now.Add(SessionLifetime)}, nil
 }
 
 // hashToken is what's stored, so a leaked sessions table can't be replayed.

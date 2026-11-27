@@ -12,9 +12,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/boinkkitty/zoop/internal/app"
 	"github.com/boinkkitty/zoop/internal/clock"
 	"github.com/boinkkitty/zoop/internal/mail/mailtest"
-	"github.com/boinkkitty/zoop/internal/server"
 	"github.com/boinkkitty/zoop/internal/testenv"
 )
 
@@ -28,7 +28,7 @@ type testApp struct {
 func startApp(t *testing.T, now time.Time) *testApp {
 	t.Helper()
 	c := clock.NewFake(now)
-	srv := httptest.NewServer(server.New(server.Deps{
+	srv := httptest.NewServer(app.New(app.Deps{
 		DB:     testenv.Pool(t),
 		Clock:  c,
 		Mailer: &mailtest.Fake{},

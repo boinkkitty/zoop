@@ -1,4 +1,5 @@
-// Package server builds the HTTP router: the JSON API plus the app shell.
+// Package server is the HTTP adapter: it turns requests into calls on the core
+// and the core's results into JSON, cookies and status codes (ADR 0002).
 package server
 
 import (
@@ -10,27 +11,23 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/boinkkitty/zoop/internal/auth"
-	"github.com/boinkkitty/zoop/internal/clock"
-	"github.com/boinkkitty/zoop/internal/mail"
 )
 
-// Deps is everything the router needs from the outside world.
+// Deps is what the router drives. internal/app builds it.
 type Deps struct {
-	DB     *pgxpool.Pool
-	Clock  clock.Clock
-	Mailer mail.Mailer
-	Assets fs.FS // the built frontend; must contain index.html
+	Auth   *auth.Service
+	Ping   func(context.Context) error // backs /api/healthz
+	Assets fs.FS                       // the built frontend; must contain index.html
 }
 
 // New returns the app's root handler.
 func New(d Deps) http.Handler {
-	authn := auth.New(d.DB, d.Clock)
+	authn := d.Auth
 	r := chi.NewRouter()
 	r.Route("/api", func(api chi.Router) {
-		api.Get("/healthz", healthz(d.DB))
+		api.Get("/healthz", healthz(d.Ping))
 		api.Route("/v1", func(v1 chi.Router) {
 			v1.Post("/auth/signup", signup(authn))
 			v1.Post("/auth/login", login(authn))
@@ -74,12 +71,11 @@ func appShell(assets fs.FS) http.HandlerFunc {
 }
 
 // healthz returns a bare 200 if SELECT 1 succeeds within ~1s.
-func healthz(pool *pgxpool.Pool) http.HandlerFunc {
+func healthz(ping func(context.Context) error) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx, cancel := context.WithTimeout(r.Context(), time.Second)
 		defer cancel()
-		var one int
-		if err := pool.QueryRow(ctx, "SELECT 1").Scan(&one); err != nil {
+		if err := ping(ctx); err != nil {
 			w.WriteHeader(http.StatusServiceUnavailable)
 			return
 		}
