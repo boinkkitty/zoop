@@ -2,19 +2,21 @@
 package clock
 
 import (
+	"context"
 	"sync"
 	"time"
 )
 
-// Clock tells the current moment. Production uses System; tests inject a Fake.
+// Clock tells the current moment for the request in ctx. Production uses System;
+// tests inject a Fake, and the e2e build shifts time per browser (cmd/zoop, -tags testclock).
 type Clock interface {
-	Now() time.Time
+	Now(ctx context.Context) time.Time
 }
 
 // System is the real wall clock.
 type System struct{}
 
-func (System) Now() time.Time { return time.Now() }
+func (System) Now(context.Context) time.Time { return time.Now() }
 
 // Fake is a Clock that only moves when told to.
 type Fake struct {
@@ -24,7 +26,7 @@ type Fake struct {
 
 func NewFake(now time.Time) *Fake { return &Fake{now: now} }
 
-func (f *Fake) Now() time.Time {
+func (f *Fake) Now(context.Context) time.Time {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.now

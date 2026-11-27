@@ -103,7 +103,10 @@ func (p *Provider) discover(ctx context.Context) (*oauth2.Config, *oidc.IDTokenV
 		return nil, nil, fmt.Errorf("discover %s: %w", p.cfg.Issuer, err)
 	}
 	p.oauth = p.config(op.Endpoint())
-	p.verifier = op.VerifierContext(context.WithoutCancel(ctx), &oidc.Config{ClientID: p.cfg.ClientID, Now: p.clock.Now})
+	p.verifier = op.VerifierContext(context.WithoutCancel(ctx), &oidc.Config{ClientID: p.cfg.ClientID, Now: func() time.Time {
+		// The verifier is cached across requests, so it can't see a request's ctx.
+		return p.clock.Now(context.Background())
+	}})
 	return p.oauth, p.verifier, nil
 }
 

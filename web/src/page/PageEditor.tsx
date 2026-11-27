@@ -1,10 +1,12 @@
 import { useQueryClient } from "@tanstack/react-query";
+import { useNavigate } from "@tanstack/react-router";
 import type { Editor } from "@tiptap/core";
 import { Placeholder, UndoRedo } from "@tiptap/extensions";
 import { EditorContent, useEditor } from "@tiptap/react";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import type { Page } from "../api";
 import { type Notice, NoticePill } from "../notices/NoticePill";
+import { DayHead } from "./DayHead";
 import { editorOptions } from "./formatting";
 import styles from "./PageEditor.module.css";
 import { pageQuery } from "./queries";
@@ -18,8 +20,18 @@ const placeholders: Record<string, Words> = {
   "i-learned": { title: "What did you learn today?", body: "" },
 };
 
-// The editor for one Page, with its Notices. Mount it with a key per Page so each gets its own saver.
-export function PageEditor({ page, owner }: { page: Page; owner: string }) {
+// The editor for one Page, with its date and Notices. Mount it with a key per Page so each gets its own saver.
+export function PageEditor({
+  page,
+  owner,
+  today,
+  timezone,
+}: {
+  page: Page;
+  owner: string;
+  today: string;
+  timezone: string;
+}) {
   const queryClient = useQueryClient();
   const editorRef = useRef<Editor | null>(null);
   const [saver] = useState(() =>
@@ -57,7 +69,7 @@ export function PageEditor({ page, owner }: { page: Page; owner: string }) {
       }),
     ],
     content: saver.restored ?? page.doc,
-    editable: page.editable,
+    editable: !status.locked,
     immediatelyRender: true,
     editorProps: {
       attributes: {
@@ -70,14 +82,65 @@ export function PageEditor({ page, owner }: { page: Page; owner: string }) {
     onBlur: () => saver.flush(),
   });
   editorRef.current = editor;
+  // At locksAt the saver has sent the last words; now the editor stops taking more.
+  useEffect(() => {
+    if (status.locked && editor.isEditable) editor.setEditable(false, false);
+  }, [editor, status.locked]);
+
+  const notices = useSaverNotices(saver, status);
+  const dayClosed = useDayClosedNotice(page, today, status.locked);
+  if (dayClosed) notices.push(dayClosed);
 
   return (
     <>
-      <NoticePill notices={useSaverNotices(saver, status)} />
+      <NoticePill notices={notices} />
+      <DayHead
+        page={page}
+        today={today}
+        timezone={timezone}
+        readOnly={status.locked}
+      />
       <EditorContent editor={editor} className={styles.editor} />
     </>
   );
 }
+
+// The Day closed Notice: on yesterday's Page once it's read only, until dismissed for that Day.
+function useDayClosedNotice(
+  page: Page,
+  today: string,
+  locked: boolean,
+): Notice | null {
+  const navigate = useNavigate();
+  const key = `zoop:dismissed:dayClosed:${page.day}`;
+  const [dismissed, setDismissed] = useState(
+    () => localStorage.getItem(key) !== null,
+  );
+  if (!locked || dismissed || page.day !== dayBefore(today)) return null;
+  return {
+    id: "dayClosed",
+    text: "Yesterday closed at 02:00. Everything you wrote is saved.",
+    actions: [
+      {
+        label: "Go to today",
+        onClick: () =>
+          navigate({
+            to: "/day/$day/$notebook",
+            params: { day: today, notebook: page.notebook },
+          }),
+      },
+    ],
+    onDismiss: () => {
+      localStorage.setItem(key, "1");
+      setDismissed(true);
+    },
+  };
+}
+
+const dayBefore = (day: string) =>
+  new Date(Date.parse(`${day}T00:00:00Z`) - 86_400_000)
+    .toISOString()
+    .slice(0, 10);
 
 // Saves what's pending when the page is hidden, unloaded, or left for another route.
 function useFlushWhenLeaving(saver: PageSaver) {

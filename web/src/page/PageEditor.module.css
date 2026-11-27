@@ -17,6 +17,12 @@
   margin: 0;
 }
 
+/* A closed Day: muted text and no caret. */
+.prose[contenteditable="false"] {
+  color: var(--color-muted);
+  caret-color: transparent;
+}
+
 /* The Title: the first line, bold by style. It is never a stored mark. */
 .prose > p:first-child {
   font-size: 21px;
