@@ -1,0 +1,28 @@
+{
+  "notebook": "my-journal",
+  "doc": {
+    "type": "doc",
+    "content": [
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": "Title"
+          }
+        ]
+      },
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": "x",
+            "marks": []
+          }
+        ]
+      }
+    ]
+  },
+  "why": "text with no marks has no marks array"
+}

@@ -8,23 +8,12 @@ import { logout } from "../api";
 import { PageEditor } from "../page/PageEditor";
 import { pageQuery } from "../page/queries";
 import { meQuery } from "../router";
+import { ShortcutSheet } from "../shortcuts/ShortcutSheet";
 import styles from "./JournalRoute.module.css";
 import { NotebookIndex } from "./NotebookIndex";
 
 export const Route = createLazyRoute("/day/$day/$notebook")({
   component: JournalRoute,
-});
-
-// A Day is a calendar date, so it's formatted in UTC: never shifted by the browser's zone.
-const weekday = new Intl.DateTimeFormat(undefined, {
-  weekday: "long",
-  timeZone: "UTC",
-});
-const longDate = new Intl.DateTimeFormat(undefined, {
-  day: "numeric",
-  month: "long",
-  year: "numeric",
-  timeZone: "UTC",
 });
 
 function JournalRoute() {
@@ -42,7 +31,6 @@ function JournalRoute() {
     },
   });
 
-  const date = new Date(`${page.day}T00:00:00Z`);
   return (
     <main className={styles.desk}>
       <header className={styles.bar}>
@@ -56,20 +44,16 @@ function JournalRoute() {
         </button>
       </header>
       <article className={styles.sheet}>
-        <header className={styles.head}>
-          <p className={styles.weekday}>
-            {weekday.format(date)}
-            {page.day === me.today && " · Today"}
-          </p>
-          <h1 className={styles.date}>{longDate.format(date)}</h1>
-        </header>
         <PageEditor
           key={`${page.day}/${page.notebook}`}
           page={page}
           owner={me.email}
+          today={me.today}
+          timezone={me.timezone}
         />
         <NotebookIndex day={page.day} active={page.notebook} />
       </article>
+      <ShortcutSheet />
     </main>
   );
 }

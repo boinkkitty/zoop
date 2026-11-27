@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"time"
 	"unicode/utf8"
 
@@ -14,6 +15,12 @@ import (
 	"github.com/boinkkitty/zoop/internal/clock"
 	"github.com/boinkkitty/zoop/internal/days"
 )
+
+// Content is a Page's document as stored (TipTap JSON, ADR 0001). It's the
+// most private thing Zoop holds, so it never appears in logs.
+type Content string
+
+func (Content) LogValue() slog.Value { return slog.StringValue("[redacted]") }
 
 // Notebooks are the v1 Notebooks, by slug.
 var Notebooks = []string{"my-journal", "i-learned"}
@@ -26,6 +33,8 @@ var (
 	ErrNoPage = errors.New("pages: no such page")
 	// ErrTooLong means the Page holds more than MaxChars characters.
 	ErrTooLong = errors.New("pages: page too long")
+	// ErrLocked means the Page's Day is read only for this user now.
+	ErrLocked = errors.New("pages: page is locked")
 	// ErrClientOutdated means the save came from an editor on an older SchemaVersion.
 	ErrClientOutdated = errors.New("pages: client schema is outdated")
 )
@@ -97,6 +106,9 @@ func (s *Service) Save(ctx context.Context, userID uuid.UUID, day time.Time, not
 	if !isNotebook(notebook) || day.Before(w.FirstDay) || day.After(w.today) {
 		return Page{}, ErrNoPage
 	}
+	if !w.writable(day) {
+		return Page{}, ErrLocked
+	}
 	if in.SchemaVersion < SchemaVersion {
 		return Page{}, ErrClientOutdated
 	}
@@ -147,21 +159,22 @@ func (s *Service) writer(ctx context.Context, userID uuid.UUID) (writer, error) 
 	if err != nil {
 		return writer{}, fmt.Errorf("stored timezone %q: %w", w.Timezone, err)
 	}
-	now := s.clock.Now()
+	now := s.clock.Now(ctx)
 	return writer{Writer: w, loc: loc, now: now, today: days.Today(now, loc)}, nil
 }
 
-// access says whether day is editable now: only today, for now.
-func (w writer) access(day time.Time) (bool, *time.Time) {
-	if !day.Equal(w.today) {
-		return false, nil
-	}
-	if w.Plan == "premium" {
-		return true, nil
-	}
-	y, m, d := day.Date()
-	locks := time.Date(y, m, d+1, days.GraceHours, 0, 0, 0, w.loc).UTC()
-	return true, &locks
+// access says whether day is editable now, and when it stops being.
+func (w writer) access(day time.Time) (bool, *time.Time) { return w.accessAt(day, w.now) }
+
+func (w writer) accessAt(day, now time.Time) (bool, *time.Time) {
+	return days.Access(days.Writer{Premium: w.Plan == "premium", FirstDay: w.FirstDay, Loc: w.loc}, day, now)
+}
+
+// writable says whether a save of day arriving now counts: a save the editor sent
+// as the Day locked may arrive up to days.SaveLeeway late.
+func (w writer) writable(day time.Time) bool {
+	ok, _ := w.accessAt(day, w.now.Add(-days.SaveLeeway))
+	return ok
 }
 
 func isNotebook(slug string) bool {

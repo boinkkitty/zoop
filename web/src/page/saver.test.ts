@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Page } from "../api";
 import { createPageSaver, type SaverDeps } from "./saver";
+import { SCHEMA_VERSION } from "./schema";
 
 const day = "2026-11-26";
 const notebook = "my-journal";
@@ -14,7 +15,7 @@ const page = (version: number, d = doc("")): Page => ({
   day,
   notebook,
   doc: d,
-  schemaVersion: 1,
+  schemaVersion: SCHEMA_VERSION,
   version,
   updatedAt: version ? "2026-11-25T20:00:00Z" : null,
   editable: true,
@@ -90,6 +91,7 @@ function saver(start = page(0), deps: Partial<SaverDeps> = {}) {
 
 beforeEach(() => {
   vi.useFakeTimers();
+  vi.setSystemTime(new Date("2026-11-26T09:00:00Z")); // the fixture Page locks at 17:00Z
   server = fakeServer();
   storage = memoryStorage();
 });
@@ -111,7 +113,7 @@ describe("autosave", () => {
     expect(server.sent).toEqual([
       {
         url: "/api/v1/pages/2026-11-26/my-journal",
-        body: { doc: doc("Ra"), schemaVersion: 1, baseVersion: 0 },
+        body: { doc: doc("Ra"), schemaVersion: SCHEMA_VERSION, baseVersion: 0 },
         keepalive: false,
       },
     ]);
@@ -174,8 +176,8 @@ describe("the save queue", () => {
     release(json(200, page(1, doc("one"))));
     await vi.advanceTimersByTimeAsync(0);
     expect(server.sent.map((r) => r.body)).toEqual([
-      { doc: doc("one"), schemaVersion: 1, baseVersion: 0 },
-      { doc: doc("three"), schemaVersion: 1, baseVersion: 1 },
+      { doc: doc("one"), schemaVersion: SCHEMA_VERSION, baseVersion: 0 },
+      { doc: doc("three"), schemaVersion: SCHEMA_VERSION, baseVersion: 1 },
     ]);
   });
 
@@ -256,7 +258,11 @@ describe("words kept on this device", () => {
     expect(back.restored).toEqual(doc("Offline thoughts"));
     await vi.advanceTimersByTimeAsync(0);
     expect(server.sent.slice(before).map((r) => r.body)).toEqual([
-      { doc: doc("Offline thoughts"), schemaVersion: 1, baseVersion: 4 },
+      {
+        doc: doc("Offline thoughts"),
+        schemaVersion: SCHEMA_VERSION,
+        baseVersion: 4,
+      },
     ]);
     expect(saver(page(5)).restored).toBeNull();
   });
@@ -273,7 +279,11 @@ describe("words kept on this device", () => {
     s.flushOnUnload();
     expect(server.sent.at(-1)).toEqual({
       url: "/api/v1/pages/2026-11-26/my-journal",
-      body: { doc: doc("last words"), schemaVersion: 1, baseVersion: 2 },
+      body: {
+        doc: doc("last words"),
+        schemaVersion: SCHEMA_VERSION,
+        baseVersion: 2,
+      },
       keepalive: true,
     });
   });
@@ -319,6 +329,7 @@ describe("save conflicts", () => {
       notSaved: null,
       conflict: null,
       outdated: false,
+      locked: false,
     });
     expect(saver(page(1)).restored).toBeNull();
 
@@ -372,6 +383,7 @@ describe("save conflicts", () => {
       notSaved: null,
       conflict: null,
       outdated: true,
+      locked: false,
     });
 
     s.edit(doc("Before the update, and after"));
@@ -384,7 +396,7 @@ describe("save conflicts", () => {
     await vi.advanceTimersByTimeAsync(0);
     expect(server.sent.at(-1)?.body).toEqual({
       doc: doc("Before the update, and after"),
-      schemaVersion: 1,
+      schemaVersion: SCHEMA_VERSION,
       baseVersion: 1,
     });
   });
@@ -416,7 +428,7 @@ describe("save conflicts", () => {
     await vi.advanceTimersByTimeAsync(0);
     expect(server.sent.at(-1)?.body).toEqual({
       doc: doc("Morning, from my laptop"),
-      schemaVersion: 1,
+      schemaVersion: SCHEMA_VERSION,
       baseVersion: 2,
     });
     expect(s.status().conflict).toBeNull();
@@ -433,5 +445,44 @@ describe("save conflicts", () => {
     s.edit(doc("Morning, from my phone. Then coffee."));
     await vi.advanceTimersByTimeAsync(1000);
     expect(server.sent.at(-1)?.body.baseVersion).toBe(2);
+  });
+});
+
+describe("the Day locking", () => {
+  it("at locksAt sends the last words at once, then reports the Page locked", async () => {
+    vi.setSystemTime(new Date("2026-11-26T16:59:59.500Z"));
+    const s = saver(page(0)); // locks at 17:00:00Z
+    s.edit(doc("the last words"));
+    await vi.advanceTimersByTimeAsync(499);
+    expect(server.sent).toHaveLength(0);
+    expect(s.status().locked).toBe(false);
+
+    await vi.advanceTimersByTimeAsync(1);
+    expect(server.sent.map((r) => r.body.doc)).toEqual([doc("the last words")]);
+    expect(s.status().locked).toBe(true);
+
+    s.edit(doc("too late"));
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(server.sent).toHaveLength(1);
+  });
+
+  it("opens locked when locksAt has already passed", () => {
+    vi.setSystemTime(new Date("2026-11-26T17:00:00Z"));
+    expect(saver(page(0)).status().locked).toBe(true);
+  });
+
+  it("when the server says the Day closed, stops saving but keeps the words on this device", async () => {
+    server.replies.push(async () =>
+      json(403, { error: { code: "page_locked", message: "Closed." } }),
+    );
+    const s = saver(page(0));
+    s.edit(doc("written after a long sleep"));
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(s.status().locked).toBe(true);
+    expect(s.status().notSaved).toBeNull();
+
+    await vi.advanceTimersByTimeAsync(120_000);
+    expect(server.sent).toHaveLength(1);
+    expect(saver(page(0)).restored).toEqual(doc("written after a long sleep"));
   });
 });

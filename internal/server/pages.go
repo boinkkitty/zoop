@@ -3,7 +3,6 @@ package server
 import (
 	"encoding/json"
 	"errors"
-	"log/slog"
 	"net/http"
 	"time"
 
@@ -37,7 +36,7 @@ func toPageResponse(p pages.Page) pageResponse {
 	}
 }
 
-func getPage(ps *pages.Service) http.HandlerFunc {
+func getPage(ps *pages.Service, rep *reporter) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		day, ok := dayParam(w, r)
 		if !ok {
@@ -45,7 +44,7 @@ func getPage(ps *pages.Service) http.HandlerFunc {
 		}
 		p, err := ps.Get(r.Context(), userID(r), day, chi.URLParam(r, "notebook"))
 		if err != nil {
-			writePageError(w, err)
+			writePageError(w, r, rep, err)
 			return
 		}
 		writeJSON(w, http.StatusOK, toPageResponse(p))
@@ -61,7 +60,7 @@ type savePageRequest struct {
 	BaseVersion   int             `json:"baseVersion"`
 }
 
-func putPage(ps *pages.Service) http.HandlerFunc {
+func putPage(ps *pages.Service, rep *reporter) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		day, ok := dayParam(w, r)
 		if !ok {
@@ -71,7 +70,7 @@ func putPage(ps *pages.Service) http.HandlerFunc {
 		err := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxPageBody)).Decode(&req)
 		var tooBig *http.MaxBytesError
 		if errors.As(err, &tooBig) {
-			writePageError(w, pages.ErrTooLong)
+			writePageError(w, r, rep, pages.ErrTooLong)
 			return
 		}
 		if err != nil {
@@ -80,7 +79,7 @@ func putPage(ps *pages.Service) http.HandlerFunc {
 		}
 		p, err := ps.Save(r.Context(), userID(r), day, chi.URLParam(r, "notebook"), pages.Save(req))
 		if err != nil {
-			writePageError(w, err)
+			writePageError(w, r, rep, err)
 			return
 		}
 		writeJSON(w, http.StatusOK, toPageResponse(p))
@@ -105,7 +104,7 @@ func moment(t *time.Time) *string {
 	return &s
 }
 
-func writePageError(w http.ResponseWriter, err error) {
+func writePageError(w http.ResponseWriter, r *http.Request, rep *reporter, err error) {
 	var conflict *pages.ConflictError
 	var bad *pages.InvalidDocError
 	switch {
@@ -119,6 +118,8 @@ func writePageError(w http.ResponseWriter, err error) {
 			apiError{"version_conflict", "This Page changed on another device."},
 			toPageResponse(conflict.Current),
 		})
+	case errors.Is(err, pages.ErrLocked):
+		writeError(w, http.StatusForbidden, "page_locked", "This Day is closed, so its Pages are read only.")
 	case errors.Is(err, pages.ErrClientOutdated):
 		writeError(w, http.StatusConflict, "client_outdated", "Zoop was updated. Reload to keep saving.")
 	case errors.Is(err, pages.ErrTooLong):
@@ -128,7 +129,6 @@ func writePageError(w http.ResponseWriter, err error) {
 	case errors.Is(err, pages.ErrNotFound):
 		writeError(w, http.StatusUnauthorized, "unauthenticated", "Please sign in.")
 	default:
-		slog.Error("page request failed", "err", err)
-		writeError(w, http.StatusInternalServerError, "internal", "Something went wrong.")
+		rep.internal(w, r, err)
 	}
 }

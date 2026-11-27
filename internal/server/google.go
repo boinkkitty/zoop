@@ -20,16 +20,16 @@ const (
 )
 
 // googleStart sends the browser to Google. ?timezone= is the browser's zone, used if this creates the account.
-func googleStart(a *auth.Service) http.HandlerFunc {
+func googleStart(a *auth.Service, rep *reporter) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		to, flow, err := a.StartGoogle(r.Context(), r.URL.Query().Get("timezone"))
 		if err != nil {
-			redirectToSignIn(w, r, err)
+			redirectToSignIn(w, r, rep, err)
 			return
 		}
 		raw, err := json.Marshal(flow)
 		if err != nil {
-			redirectToSignIn(w, r, err)
+			redirectToSignIn(w, r, rep, err)
 			return
 		}
 		http.SetCookie(w, &http.Cookie{
@@ -43,18 +43,18 @@ func googleStart(a *auth.Service) http.HandlerFunc {
 }
 
 // googleCallback finishes the sign-in Google sent the browser back from, then opens the app.
-func googleCallback(a *auth.Service) http.HandlerFunc {
+func googleCallback(a *auth.Service, rep *reporter) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		flow := readGoogleFlow(r)
 		clearGoogleFlow(w, r)
 		q := r.URL.Query()
 		if q.Get("error") != "" { // the user cancelled, or Google refused
-			redirectToSignIn(w, r, auth.ErrGoogleFailed)
+			redirectToSignIn(w, r, rep, auth.ErrGoogleFailed)
 			return
 		}
 		sess, err := a.FinishGoogle(r.Context(), flow, q.Get("state"), q.Get("code"))
 		if err != nil {
-			redirectToSignIn(w, r, err)
+			redirectToSignIn(w, r, rep, err)
 			return
 		}
 		setSessionCookie(w, r, sess)
@@ -84,7 +84,7 @@ func clearGoogleFlow(w http.ResponseWriter, r *http.Request) {
 }
 
 // redirectToSignIn sends the browser to the sign-in screen with a code it can explain.
-func redirectToSignIn(w http.ResponseWriter, r *http.Request, err error) {
+func redirectToSignIn(w http.ResponseWriter, r *http.Request, rep *reporter, err error) {
 	code := "google_failed"
 	var v *auth.ValidationError
 	switch {
@@ -95,7 +95,7 @@ func redirectToSignIn(w http.ResponseWriter, r *http.Request, err error) {
 	case errors.Is(err, auth.ErrGoogleFailed), errors.As(err, &v):
 		slog.Info("google sign-in refused", "err", err)
 	default:
-		slog.Error("google sign-in failed", "err", err)
+		rep.report(r, err)
 	}
 	http.Redirect(w, r, "/signin?error="+url.QueryEscape(code), http.StatusFound)
 }

@@ -10,7 +10,9 @@ import (
 // SchemaVersion is the version of the Page document format this server reads and writes.
 // The client's constant (web/src/page/schema.ts) must match it, and so must
 // testdata/page-docs/schema-version.json.
-const SchemaVersion = 1
+//
+// 2: formatting (marks, lists, checklists, quotes).
+const SchemaVersion = 2
 
 // EmptyDoc is an unwritten Page: one empty paragraph, the Title line.
 var EmptyDoc = json.RawMessage(`{"type":"doc","content":[{"type":"paragraph"}]}`)
@@ -31,26 +33,14 @@ type node struct {
 	Marks   json.RawMessage `json:"marks"`
 }
 
-// grammar is the shape of one Notebook's document.
-type grammar struct {
-	// titled: the first block is the Day's Title, always a plain paragraph (`paragraph block*`).
-	// Otherwise any blocks will do (`block+`).
-	titled bool
-}
-
-// grammars are the v1 Notebooks' documents, by slug. The client's (web/src/page/schema.ts) match.
-var grammars = map[string]grammar{
-	"my-journal": {titled: true},
-	"i-learned":  {titled: false},
-}
-
-// ParseDoc checks that doc is a Page for notebook in the current schema and returns its plain text:
-// formatting removed, one line per block.
+// ParseDoc checks that doc is a Page for notebook in the current schema (schema.go) and returns
+// its plain text: formatting, list markers and checkboxes dropped, one line per paragraph, and so
+// one line per block wherever it sits (in a list, a checklist or a quote).
 //
-// A block so far is a paragraph holding text. My Journal is `paragraph block*`: its first paragraph
-// is the Title, whose bold is CSS, never a stored mark. I Learned is `block+`, with no Title.
+// In My Journal the first paragraph is the Title; its bold is CSS, never a stored mark.
+// I Learned has no Title.
 func ParseDoc(notebook string, doc json.RawMessage) (string, error) {
-	g, ok := grammars[notebook]
+	rule, ok := docRules[notebook]
 	if !ok {
 		return "", invalid("there's no Notebook %q", notebook)
 	}
@@ -64,29 +54,66 @@ func ParseDoc(notebook string, doc json.RawMessage) (string, error) {
 		return "", invalid("the root must be a plain doc node")
 	}
 	if root.Content == nil || len(*root.Content) == 0 {
-		if g.titled {
+		if rule.first != "" {
 			return "", invalid("a Page starts with its Title paragraph")
 		}
 		return "", invalid("a Page has at least one block")
 	}
-	lines := make([]string, 0, len(*root.Content))
+	if err := rule.check(*root.Content); err != nil {
+		return "", invalid("doc: %v", err)
+	}
+	var lines []string
 	for i, block := range *root.Content {
-		if i == 0 && g.titled && block.Type != "paragraph" {
-			return "", invalid("the Title is a plain paragraph, not %q", block.Type)
-		}
-		line, err := paragraph(block)
-		if err != nil {
+		if err := walk(block, 0, &lines); err != nil {
 			return "", invalid("block %d: %v", i, err)
 		}
-		lines = append(lines, line)
 	}
 	return strings.Join(lines, "\n"), nil
 }
 
-func paragraph(n node) (string, error) {
-	if n.Type != "paragraph" {
-		return "", fmt.Errorf("%q is not a block in this schema", n.Type)
+// walk checks a block node and its descendants, appending one line per paragraph.
+// depth is how many lists the node already sits inside.
+func walk(n node, depth int, lines *[]string) error {
+	if n.Type == "paragraph" {
+		line, err := paragraph(n)
+		if err != nil {
+			return err
+		}
+		*lines = append(*lines, line)
+		return nil
 	}
+	rule, ok := containers[n.Type]
+	if !ok {
+		return fmt.Errorf("%q is not a block in this schema", n.Type)
+	}
+	if n.Text != nil || len(n.Marks) > 0 {
+		return fmt.Errorf("a %s has no text or marks of its own", n.Type)
+	}
+	if err := checkAttrs(n.Type, n.Attrs); err != nil {
+		return err
+	}
+	if lists[n.Type] {
+		depth++
+		if depth > MaxListDepth {
+			return fmt.Errorf("lists nest at most %d levels", MaxListDepth)
+		}
+	}
+	var children []node
+	if n.Content != nil {
+		children = *n.Content
+	}
+	if err := rule.check(children); err != nil {
+		return fmt.Errorf("%s: %v", n.Type, err)
+	}
+	for _, c := range children {
+		if err := walk(c, depth, lines); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func paragraph(n node) (string, error) {
 	if n.Text != nil || len(n.Marks) > 0 || !noAttrs(n.Attrs) {
 		return "", fmt.Errorf("a paragraph has no text, marks or attrs of its own")
 	}
@@ -104,12 +131,45 @@ func paragraph(n node) (string, error) {
 		if inline.Content != nil || !noAttrs(inline.Attrs) {
 			return "", fmt.Errorf("a text node is a leaf with no attrs")
 		}
-		if len(inline.Marks) > 0 && string(inline.Marks) != "null" {
-			return "", fmt.Errorf("no marks are in this schema yet")
+		if err := checkMarks(inline.Marks); err != nil {
+			return "", err
 		}
 		b.WriteString(*inline.Text)
 	}
 	return b.String(), nil
+}
+
+// checkMarks checks a text node's marks: absent, or a non-empty list of distinct v1 marks.
+func checkMarks(raw json.RawMessage) error {
+	if len(raw) == 0 || string(raw) == "null" {
+		return nil
+	}
+	dec := json.NewDecoder(bytes.NewReader(raw))
+	dec.DisallowUnknownFields()
+	var marks []struct {
+		Type  string          `json:"type"`
+		Attrs json.RawMessage `json:"attrs"`
+	}
+	if err := dec.Decode(&marks); err != nil {
+		return fmt.Errorf("marks: %v", err)
+	}
+	if len(marks) == 0 {
+		return fmt.Errorf("text with no marks has no marks list")
+	}
+	seen := map[string]bool{}
+	for _, m := range marks {
+		if !markTypes[m.Type] {
+			return fmt.Errorf("%q is not a mark in this schema", m.Type)
+		}
+		if seen[m.Type] {
+			return fmt.Errorf("%q appears twice", m.Type)
+		}
+		seen[m.Type] = true
+		if !noAttrs(m.Attrs) {
+			return fmt.Errorf("a %s mark has no attrs", m.Type)
+		}
+	}
+	return nil
 }
 
 func noAttrs(raw json.RawMessage) bool {

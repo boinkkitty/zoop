@@ -1,0 +1,45 @@
+.head {
+  margin-bottom: 28px;
+}
+
+.weekday {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 3px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--color-faint);
+}
+
+.date {
+  margin: 0;
+  font-size: 19px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: var(--color-desk);
+  color: var(--color-muted);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.open {
+  background: #eaf8ee;
+  color: #248a3d;
+}
+
+.dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
