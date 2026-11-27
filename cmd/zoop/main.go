@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 	"time"
 	_ "time/tzdata" // signup validates IANA zones; don't depend on the image having them
@@ -61,6 +62,11 @@ func run() error {
 	}
 	defer reports.Flush(2 * time.Second)
 
+	proxies, err := trustedProxies()
+	if err != nil {
+		return err
+	}
+
 	googleCfg, err := googleConfig()
 	if err != nil {
 		return err
@@ -88,6 +94,8 @@ func run() error {
 		Google: googleCfg,
 		Logs:   os.Stdout,
 		Sentry: reports,
+
+		TrustedProxies: proxies,
 	}
 	go app.KeepSwept(ctx, deps, sweepEvery)
 
@@ -150,4 +158,20 @@ func googleConfig() (*google.Config, error) {
 		return nil, errors.New("GOOGLE_CLIENT_ID is set, so GOOGLE_CLIENT_SECRET and GOOGLE_REDIRECT_URL must be too")
 	}
 	return cfg, nil
+}
+
+// trustedProxies reads TRUSTED_PROXIES: how many proxies in front of the app append
+// to X-Forwarded-For. Railway has one. Unset, the header is ignored, which is right
+// when nothing sits in front, but behind a proxy it puts everyone on the proxy's IP.
+func trustedProxies() (int, error) {
+	v := os.Getenv("TRUSTED_PROXIES")
+	if v == "" {
+		slog.Warn("TRUSTED_PROXIES is not set: X-Forwarded-For is ignored (set it to 1 behind Railway)")
+		return 0, nil
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil || n < 0 {
+		return 0, fmt.Errorf("TRUSTED_PROXIES must be a whole number of proxies, got %q", v)
+	}
+	return n, nil
 }

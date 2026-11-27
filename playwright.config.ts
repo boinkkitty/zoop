@@ -21,6 +21,8 @@ export default defineConfig({
         reuseExistingServer: false,
         env: {
           PORT: String(port),
+          // e2e/fixtures.ts gives each test its own client IP as the proxy hop.
+          TRUSTED_PROXIES: "1",
           DATABASE_URL:
             process.env.ZOOP_E2E_DATABASE_URL ??
             "postgres://zoop:zoop@localhost:5433/zoop?sslmode=disable",
