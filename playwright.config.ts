@@ -13,7 +13,7 @@ export default defineConfig({
   webServer: external
     ? undefined
     : {
-        command: "pnpm build:bin && ./bin/zoop",
+        command: "pnpm build:bin && go run ./cmd/migrate && ./bin/zoop",
         url: `http://localhost:${port}/api/healthz`,
         timeout: 120_000,
         reuseExistingServer: false,

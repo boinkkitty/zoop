@@ -1,4 +1,5 @@
 // Command zoop is the whole app: the JSON API and the built frontend, from one origin.
+// It does not migrate the database; run cmd/migrate first.
 package main
 
 import (
@@ -15,7 +16,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/boinkkitty/zoop/internal/clock"
-	"github.com/boinkkitty/zoop/internal/db"
 	"github.com/boinkkitty/zoop/internal/mail"
 	"github.com/boinkkitty/zoop/internal/server"
 	"github.com/boinkkitty/zoop/web"
@@ -46,10 +46,6 @@ func run() error {
 		return fmt.Errorf("open database: %w", err)
 	}
 	defer pool.Close()
-
-	if err := db.Migrate(ctx, pool); err != nil {
-		return fmt.Errorf("migrate: %w", err)
-	}
 
 	srv := &http.Server{
 		Addr: ":" + port,

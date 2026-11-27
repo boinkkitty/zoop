@@ -75,9 +75,16 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm exec playwright install --with-deps chromium
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
       - name: Build the image
         run: docker build -t zoop:ci .
-      - name: Start the image on an empty database
+      - name: Migrate the empty database
+        run: go run ./cmd/migrate
+        env:
+          DATABASE_URL: postgres://zoop:zoop@localhost:5433/zoop?sslmode=disable
+      - name: Start the image on the migrated database
         run: |
           docker run -d --name zoop --network host \
             -e PORT=8091 \

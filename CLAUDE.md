@@ -12,6 +12,11 @@ The five default roles (needs-triage, needs-info, ready-for-agent, ready-for-hum
 
 Single-context: `GLOSSARY.md` and `docs/adr/` at the repo root. See `docs/agents/domain.md`.
 
+## Backend
+
+- **Architecture:** hexagonal. Keep the rules in core packages, separate from the code that talks to HTTP, databases, queues and other external systems. See `docs/adr/0002-hexagonal-architecture.md`.
+- **Migrations:** not run from `main` (`cmd/zoop`). The user runs them manually with `pnpm migrate` (`go run ./cmd/migrate`, needs `DATABASE_URL`).
+
 ## Pull Requests
 
 ### Title
