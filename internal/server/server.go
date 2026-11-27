@@ -5,11 +5,13 @@ package server
 import (
 	"context"
 	"io/fs"
+	"log/slog"
 	"net/http"
 	"path"
 	"strings"
 	"time"
 
+	"github.com/getsentry/sentry-go"
 	"github.com/go-chi/chi/v5"
 
 	"github.com/boinkkitty/zoop/internal/auth"
@@ -20,21 +22,33 @@ type Deps struct {
 	Auth   *auth.Service
 	Ping   func(context.Context) error // backs /api/healthz
 	Assets fs.FS                       // the built frontend; must contain index.html
+	Log    *slog.Logger                // allowlisting; see internal/logging
+	Sentry *sentry.Client              // nil turns error reporting off
 }
 
 // New returns the app's root handler.
 func New(d Deps) http.Handler {
 	authn := d.Auth
+	rep := &reporter{log: d.Log, sentry: d.Sentry}
 	r := chi.NewRouter()
+	r.Use(accessLog(d.Log), recoverPanics(rep))
+
+	// CSRF: browsers label cross-site requests, so state-changing ones from other sites are refused.
+	csrf := http.NewCrossOriginProtection()
+	csrf.SetDenyHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		writeError(w, http.StatusForbidden, "cross_origin", "Cross-origin requests aren't allowed.")
+	}))
+	r.Use(csrf.Handler)
+
 	r.Route("/api", func(api chi.Router) {
 		api.Get("/healthz", healthz(d.Ping))
 		api.Route("/v1", func(v1 chi.Router) {
-			v1.Post("/auth/signup", signup(authn))
-			v1.Post("/auth/login", login(authn))
-			v1.Post("/auth/logout", logout(authn))
+			v1.Post("/auth/signup", signup(authn, rep))
+			v1.Post("/auth/login", login(authn, rep))
+			v1.Post("/auth/logout", logout(authn, rep))
 			v1.Group(func(signedIn chi.Router) {
-				signedIn.Use(requireUser(authn))
-				signedIn.Get("/me", getMe(authn))
+				signedIn.Use(requireUser(authn, rep))
+				signedIn.Get("/me", getMe(authn, rep))
 			})
 		})
 		api.NotFound(func(w http.ResponseWriter, r *http.Request) {
@@ -42,13 +56,7 @@ func New(d Deps) http.Handler {
 		})
 	})
 	r.NotFound(appShell(d.Assets))
-
-	// CSRF: browsers label cross-site requests, so state-changing ones from other sites are refused.
-	csrf := http.NewCrossOriginProtection()
-	csrf.SetDenyHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		writeError(w, http.StatusForbidden, "cross_origin", "Cross-origin requests aren't allowed.")
-	}))
-	return csrf.Handler(r)
+	return r
 }
 
 // appShell serves a built file when the path names one, and otherwise

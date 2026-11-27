@@ -49,15 +49,15 @@ func New(store Store, c clock.Clock) *Service {
 
 // Session is a signed-in device.
 type Session struct {
-	Token     string // only known when the session is created
+	Token     Token // only known when the session is created
 	UserID    uuid.UUID
 	ExpiresAt time.Time
 	Renewed   bool // the expiry moved, so the cookie should be re-sent
 }
 
 // Signup creates a user with a password identity, their first Day being today in timezone, and signs them in.
-func (s *Service) Signup(ctx context.Context, email, plain, timezone string) (Session, error) {
-	email = normalizeEmail(email)
+func (s *Service) Signup(ctx context.Context, rawEmail Email, plain Password, timezone string) (Session, error) {
+	email := normalizeEmail(rawEmail)
 	if err := validateEmail(email); err != nil {
 		return Session{}, err
 	}
@@ -68,7 +68,7 @@ func (s *Service) Signup(ctx context.Context, email, plain, timezone string) (Se
 	if err != nil {
 		return Session{}, err
 	}
-	hash, err := password.Hash(plain)
+	hash, err := password.Hash(string(plain))
 	if err != nil {
 		return Session{}, err
 	}
@@ -78,7 +78,7 @@ func (s *Service) Signup(ctx context.Context, email, plain, timezone string) (Se
 		return Session{}, err
 	}
 	userID, err := s.store.CreateAccount(ctx, NewAccount{
-		Email: email, FirstDay: days.Today(now, loc), Timezone: timezone, PasswordHash: hash, CreatedAt: now,
+		Email: string(email), FirstDay: days.Today(now, loc), Timezone: timezone, PasswordHash: hash, CreatedAt: now,
 	}, first)
 	if err != nil {
 		return Session{}, err
@@ -88,20 +88,20 @@ func (s *Service) Signup(ctx context.Context, email, plain, timezone string) (Se
 
 // Login signs a new device in with an email and password.
 // Every failure is ErrBadLogin, so it doesn't reveal which emails have accounts.
-func (s *Service) Login(ctx context.Context, email, plain string) (Session, error) {
+func (s *Service) Login(ctx context.Context, email Email, plain Password) (Session, error) {
 	if len(plain) > password.MaxBytes {
 		return Session{}, ErrBadLogin
 	}
-	userID, hash, err := s.store.PasswordLogin(ctx, normalizeEmail(email))
+	userID, hash, err := s.store.PasswordLogin(ctx, string(normalizeEmail(email)))
 	if errors.Is(err, ErrNotFound) {
 		// Spend the same time as a real check, so timing doesn't reveal it either.
-		_, _ = password.Verify(dummyHash, plain)
+		_, _ = password.Verify(dummyHash, string(plain))
 		return Session{}, ErrBadLogin
 	}
 	if err != nil {
 		return Session{}, err
 	}
-	ok, err := password.Verify(hash, plain)
+	ok, err := password.Verify(hash, string(plain))
 	if err != nil {
 		return Session{}, fmt.Errorf("verify stored hash: %w", err)
 	}
@@ -128,7 +128,7 @@ var dummyHash = func() string {
 }()
 
 // Authenticate finds the live session for token, pushing its expiry forward if it hasn't been for RenewEvery.
-func (s *Service) Authenticate(ctx context.Context, token string) (Session, error) {
+func (s *Service) Authenticate(ctx context.Context, token Token) (Session, error) {
 	if token == "" {
 		return Session{}, ErrNoSession
 	}
@@ -152,7 +152,7 @@ func (s *Service) Authenticate(ctx context.Context, token string) (Session, erro
 }
 
 // Logout ends the session for token. Ending a session that doesn't exist is not an error.
-func (s *Service) Logout(ctx context.Context, token string) error {
+func (s *Service) Logout(ctx context.Context, token Token) error {
 	if token == "" {
 		return nil
 	}
@@ -200,35 +200,37 @@ func (s *Service) Account(ctx context.Context, userID uuid.UUID) (Account, error
 }
 
 // newSession makes a fresh random token, returning it and the session to store under its hash.
-func newSession(now time.Time) (string, NewSession, error) {
+func newSession(now time.Time) (Token, NewSession, error) {
 	raw := make([]byte, 32)
 	if _, err := rand.Read(raw); err != nil {
 		return "", NewSession{}, err
 	}
-	token := base64.RawURLEncoding.EncodeToString(raw)
+	token := Token(base64.RawURLEncoding.EncodeToString(raw))
 	return token, NewSession{TokenHash: hashToken(token), CreatedAt: now, ExpiresAt: now.Add(SessionLifetime)}, nil
 }
 
 // hashToken is what's stored, so a leaked sessions table can't be replayed.
-func hashToken(token string) []byte {
+func hashToken(token Token) []byte {
 	sum := sha256.Sum256([]byte(token))
 	return sum[:]
 }
 
-func normalizeEmail(email string) string { return strings.ToLower(strings.TrimSpace(email)) }
+func normalizeEmail(email Email) Email {
+	return Email(strings.ToLower(strings.TrimSpace(string(email))))
+}
 
 // MinPasswordLen is the shortest password a new account may use.
 const MinPasswordLen = 8
 
-func validateEmail(email string) error {
-	addr, err := mail.ParseAddress(email)
-	if err != nil || addr.Address != email || len(email) > 254 {
+func validateEmail(email Email) error {
+	addr, err := mail.ParseAddress(string(email))
+	if err != nil || addr.Address != string(email) || len(email) > 254 {
 		return &ValidationError{"Enter a valid email address."}
 	}
 	return nil
 }
 
-func validateNewPassword(plain string) error {
+func validateNewPassword(plain Password) error {
 	if len(plain) < MinPasswordLen {
 		return &ValidationError{fmt.Sprintf("Use at least %d characters for your password.", MinPasswordLen)}
 	}

@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"log/slog"
 	"net/http"
 	"time"
 
@@ -17,12 +16,12 @@ import (
 const sessionCookie = "zoop_session"
 
 type credentials struct {
-	Email    string `json:"email"`
-	Password string `json:"password"`
-	Timezone string `json:"timezone"`
+	Email    auth.Email    `json:"email"`
+	Password auth.Password `json:"password"`
+	Timezone string        `json:"timezone"`
 }
 
-func signup(a *auth.Service) http.HandlerFunc {
+func signup(a *auth.Service, rep *reporter) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var c credentials
 		if !decode(w, r, &c) {
@@ -30,7 +29,7 @@ func signup(a *auth.Service) http.HandlerFunc {
 		}
 		sess, err := a.Signup(r.Context(), c.Email, c.Password, c.Timezone)
 		if err != nil {
-			writeAuthError(w, err)
+			writeAuthError(w, r, rep, err)
 			return
 		}
 		setSessionCookie(w, r, sess)
@@ -38,7 +37,7 @@ func signup(a *auth.Service) http.HandlerFunc {
 	}
 }
 
-func login(a *auth.Service) http.HandlerFunc {
+func login(a *auth.Service, rep *reporter) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var c credentials
 		if !decode(w, r, &c) {
@@ -46,7 +45,7 @@ func login(a *auth.Service) http.HandlerFunc {
 		}
 		sess, err := a.Login(r.Context(), c.Email, c.Password)
 		if err != nil {
-			writeAuthError(w, err)
+			writeAuthError(w, r, rep, err)
 			return
 		}
 		setSessionCookie(w, r, sess)
@@ -55,11 +54,11 @@ func login(a *auth.Service) http.HandlerFunc {
 }
 
 // logout signs out this device: the session is deleted and the cookie cleared.
-func logout(a *auth.Service) http.HandlerFunc {
+func logout(a *auth.Service, rep *reporter) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if c, err := r.Cookie(sessionCookie); err == nil {
-			if err := a.Logout(r.Context(), c.Value); err != nil {
-				writeAuthError(w, err)
+			if err := a.Logout(r.Context(), auth.Token(c.Value)); err != nil {
+				writeAuthError(w, r, rep, err)
 				return
 			}
 		}
@@ -74,17 +73,20 @@ func logout(a *auth.Service) http.HandlerFunc {
 type userKey struct{}
 
 // requireUser lets the request through only with a live session, renewing its cookie when the expiry moves.
-func requireUser(a *auth.Service) func(http.Handler) http.Handler {
+func requireUser(a *auth.Service, rep *reporter) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			var token string
+			var token auth.Token
 			if c, err := r.Cookie(sessionCookie); err == nil {
-				token = c.Value
+				token = auth.Token(c.Value)
 			}
 			sess, err := a.Authenticate(r.Context(), token)
 			if err != nil {
-				writeAuthError(w, err)
+				writeAuthError(w, r, rep, err)
 				return
+			}
+			if rl := requestLogFrom(r.Context()); rl != nil {
+				rl.userID = sess.UserID
 			}
 			if sess.Renewed {
 				sess.Token = token
@@ -109,11 +111,11 @@ type meResponse struct {
 	SignInMethods   []string `json:"signInMethods"`
 }
 
-func getMe(a *auth.Service) http.HandlerFunc {
+func getMe(a *auth.Service, rep *reporter) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		acct, err := a.Account(r.Context(), userID(r))
 		if err != nil {
-			writeAuthError(w, err)
+			writeAuthError(w, r, rep, err)
 			return
 		}
 		res := meResponse{
@@ -137,7 +139,7 @@ func getMe(a *auth.Service) http.HandlerFunc {
 func setSessionCookie(w http.ResponseWriter, r *http.Request, sess auth.Session) {
 	http.SetCookie(w, &http.Cookie{
 		Name:     sessionCookie,
-		Value:    sess.Token,
+		Value:    string(sess.Token),
 		Path:     "/",
 		Expires:  sess.ExpiresAt,
 		HttpOnly: true,
@@ -151,7 +153,7 @@ func isHTTPS(r *http.Request) bool {
 	return r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https"
 }
 
-func writeAuthError(w http.ResponseWriter, err error) {
+func writeAuthError(w http.ResponseWriter, r *http.Request, rep *reporter, err error) {
 	var v *auth.ValidationError
 	switch {
 	case errors.As(err, &v):
@@ -163,8 +165,7 @@ func writeAuthError(w http.ResponseWriter, err error) {
 	case errors.Is(err, auth.ErrNoSession):
 		writeError(w, http.StatusUnauthorized, "unauthenticated", "Please sign in.")
 	default:
-		slog.Error("auth request failed", "err", err)
-		writeError(w, http.StatusInternalServerError, "internal", "Something went wrong.")
+		rep.internal(w, r, err)
 	}
 }
 
