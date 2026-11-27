@@ -62,7 +62,11 @@ function JournalRoute() {
           </p>
           <h1 className={styles.date}>{longDate.format(date)}</h1>
         </header>
-        <PageEditor key={`${page.day}/${page.notebook}`} page={page} />
+        <PageEditor
+          key={`${page.day}/${page.notebook}`}
+          page={page}
+          owner={me.email}
+        />
       </article>
     </main>
   );
