@@ -8,6 +8,7 @@ import {
 } from "@tanstack/react-router";
 import { getMe, isUnauthenticated } from "./api";
 import { AuthScreen } from "./auth/AuthScreen";
+import { pageQuery } from "./page/queries";
 
 export const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: false, staleTime: 60_000 } },
@@ -58,6 +59,8 @@ const dayRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/day/$day/$notebook",
   beforeLoad: ({ context }) => requireMe(context.queryClient),
+  loader: ({ context, params }) =>
+    context.queryClient.ensureQueryData(pageQuery(params.day, params.notebook)),
 }).lazy(() => import("./journal/JournalRoute").then((m) => m.Route));
 
 // Unknown paths go home, which sends the visitor to sign in or to today.

@@ -1,0 +1,43 @@
+.editor {
+  min-height: 60vh;
+}
+
+.prose {
+  outline: none;
+  min-height: 60vh;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  font-size: 17px;
+  line-height: 1.65;
+  color: var(--color-ink);
+  caret-color: #0a84ff;
+}
+
+.prose p {
+  margin: 0;
+}
+
+/* The Title: the first line, bold by style. It is never a stored mark. */
+.prose > p:first-child {
+  font-size: 21px;
+  font-weight: 650;
+  letter-spacing: -0.015em;
+  line-height: 1.35;
+  margin-bottom: 14px;
+}
+
+.prose p:global(.is-empty)::before {
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  color: var(--color-faint);
+  pointer-events: none;
+}
+
+/* While only the Title line exists, hint at the body below it. */
+.prose:has(> p:only-child)::after {
+  content: attr(data-body-placeholder);
+  display: block;
+  color: var(--color-faint);
+  pointer-events: none;
+}

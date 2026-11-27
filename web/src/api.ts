@@ -1,3 +1,5 @@
+import type { JSONContent } from "@tiptap/core";
+
 // The JSON API client. Errors arrive as {error: {code, message}}.
 
 export class ApiError extends Error {
@@ -50,6 +52,26 @@ export type Me = {
 };
 
 export const getMe = () => request<Me>("GET", "/me");
+
+// A Page document as TipTap writes it. Type-only, so this file never loads TipTap.
+export type Doc = { type: "doc"; content?: JSONContent[] };
+
+export type Page = {
+  day: string;
+  notebook: string;
+  doc: Doc;
+  schemaVersion: number;
+  version: number;
+  updatedAt: string | null;
+  editable: boolean;
+  locksAt: string | null;
+};
+
+export const pagePath = (day: string, notebook: string) =>
+  `/pages/${day}/${notebook}`;
+
+export const getPage = (day: string, notebook: string) =>
+  request<Page>("GET", pagePath(day, notebook));
 
 export const signup = (email: string, password: string) =>
   request<void>("POST", "/auth/signup", {

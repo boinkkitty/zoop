@@ -1,0 +1,8 @@
+{
+  "notebook": "my-journal",
+  "doc": {
+    "type": "doc",
+    "content": [{ "type": "paragraph", "content": [{ "type": "paragraph" }] }]
+  },
+  "why": "paragraphs hold only inline content"
+}
