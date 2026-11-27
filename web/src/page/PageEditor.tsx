@@ -1,7 +1,8 @@
 import { useQueryClient } from "@tanstack/react-query";
+import type { Editor } from "@tiptap/core";
 import { Placeholder, UndoRedo } from "@tiptap/extensions";
 import { EditorContent, useEditor } from "@tiptap/react";
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import type { Page } from "../api";
 import { type Notice, NoticePill } from "../notices/NoticePill";
 import styles from "./PageEditor.module.css";
@@ -19,6 +20,7 @@ const placeholders: Record<string, Words> = {
 // The editor for one Page, with its Notices. Mount it with a key per Page so each gets its own saver.
 export function PageEditor({ page, owner }: { page: Page; owner: string }) {
   const queryClient = useQueryClient();
+  const editorRef = useRef<Editor | null>(null);
   const [saver] = useState(() =>
     createPageSaver({
       day: page.day,
@@ -32,8 +34,12 @@ export function PageEditor({ page, owner }: { page: Page; owner: string }) {
           pageQuery(saved.day, saved.notebook).queryKey,
           saved,
         ),
+      onReplace: (doc) =>
+        editorRef.current?.commands.setContent(doc, { emitUpdate: false }),
     }),
   );
+  // The Page is refetched when the window regains focus: a newer version from another device.
+  useEffect(() => saver.remoteChanged(page), [saver, page]);
   useFlushWhenLeaving(saver);
   const status = useSyncExternalStore(saver.subscribe, saver.status);
 
@@ -63,6 +69,7 @@ export function PageEditor({ page, owner }: { page: Page; owner: string }) {
     onUpdate: ({ editor }) => saver.edit(editor.getJSON() as Doc),
     onBlur: () => saver.flush(),
   });
+  editorRef.current = editor;
 
   return (
     <>
@@ -92,6 +99,23 @@ function useFlushWhenLeaving(saver: PageSaver) {
 function useSaverNotices(saver: PageSaver, status: SaverStatus): Notice[] {
   const now = useNow(status.notSaved !== null);
   const notices: Notice[] = [];
+  if (status.outdated) {
+    notices.push({
+      id: "update",
+      text: "Zoop was updated. Reload to keep saving. What you wrote is kept on this device.",
+      actions: [{ label: "Reload", onClick: () => window.location.reload() }],
+    });
+  }
+  if (status.conflict) {
+    notices.push({
+      id: "conflict",
+      text: "This Page changed on another device.",
+      actions: [
+        { label: "Keep this version", onClick: () => saver.keepMine() },
+        { label: "Use the other", onClick: () => saver.takeTheirs() },
+      ],
+    });
+  }
   if (status.notSaved) {
     const secs = Math.max(0, Math.ceil((status.notSaved.retryAt - now) / 1000));
     notices.push({

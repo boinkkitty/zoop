@@ -286,3 +286,152 @@ describe("words kept on this device", () => {
     );
   });
 });
+
+const conflict = (current: Page) =>
+  json(409, {
+    error: {
+      code: "version_conflict",
+      message: "This Page changed on another device.",
+    },
+    page: current,
+  });
+
+describe("save conflicts", () => {
+  it("quietly takes the server's version when it already holds this writing", async () => {
+    // The unload request landed, but the kept copy still names the old version.
+    const closedTab = vi.fn(() => new Promise<Response>(() => {}));
+    saver(page(0), { fetch: closedTab }).edit(doc("Offline on the train"));
+    // Postgres hands JSON back with its keys in its own order.
+    const stored = {
+      content: [
+        {
+          content: [{ text: "Offline on the train", type: "text" }],
+          type: "paragraph",
+        },
+      ],
+      type: "doc" as const,
+    };
+    server.replies.push(async () => conflict(page(1, stored)));
+
+    const back = saver(page(1, doc("Offline on the train")));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(back.status()).toEqual({
+      notSaved: null,
+      conflict: null,
+      outdated: false,
+    });
+    expect(saver(page(1)).restored).toBeNull();
+
+    back.edit(doc("Offline on the train, home now"));
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(server.sent.map((r) => r.body.baseVersion)).toEqual([0, 1]);
+  });
+
+  it("quietly takes a newer version from another device when there are no local edits", async () => {
+    const onReplace = vi.fn();
+    const s = saver(page(1, doc("Morning")), { onReplace });
+
+    s.remoteChanged(page(1, doc("Morning")));
+    expect(onReplace).not.toHaveBeenCalled();
+    s.remoteChanged(page(3, doc("Morning, from my phone")));
+    expect(onReplace).toHaveBeenCalledWith(doc("Morning, from my phone"));
+
+    s.edit(doc("Morning, from my phone. Back on the laptop."));
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(server.sent.at(-1)?.body.baseVersion).toBe(3);
+
+    // With an edit waiting, a newer version isn't swapped in: the save's 409 decides.
+    s.edit(doc("Unsaved thought"));
+    s.remoteChanged(page(9, doc("Elsewhere")));
+    expect(onReplace).toHaveBeenCalledTimes(1);
+  });
+
+  it("quietly takes the server's version on a conflict when nothing here changed", async () => {
+    const onReplace = vi.fn();
+    const s = saver(page(1, doc("Morning")), { onReplace });
+    server.replies.push(async () => conflict(page(2, doc("Phone words"))));
+    s.edit(doc("Morning!"));
+    s.edit(doc("Morning")); // typed, then undone
+    await vi.advanceTimersByTimeAsync(1000);
+
+    expect(onReplace).toHaveBeenCalledWith(doc("Phone words"));
+    expect(s.status().conflict).toBeNull();
+    expect(saver(page(2)).restored).toBeNull();
+  });
+
+  it("stops saving when Zoop was updated, keeps the writing, and the reloaded tab sends it", async () => {
+    const s = saver(page(1, doc("Before")));
+    server.replies.push(async () =>
+      json(409, {
+        error: { code: "client_outdated", message: "Zoop was updated." },
+      }),
+    );
+    s.edit(doc("Before the update"));
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(s.status()).toEqual({
+      notSaved: null,
+      conflict: null,
+      outdated: true,
+    });
+
+    s.edit(doc("Before the update, and after"));
+    await vi.advanceTimersByTimeAsync(60_000);
+    s.flushOnUnload();
+    expect(server.sent).toHaveLength(1);
+
+    const reloaded = saver(page(1, doc("Before")));
+    expect(reloaded.restored).toEqual(doc("Before the update, and after"));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(server.sent.at(-1)?.body).toEqual({
+      doc: doc("Before the update, and after"),
+      schemaVersion: 1,
+      baseVersion: 1,
+    });
+  });
+
+  async function bothEdited() {
+    const onReplace = vi.fn();
+    const s = saver(page(1, doc("Morning")), { onReplace });
+    const theirs = page(2, doc("Morning, from my phone"));
+    server.replies.push(async () => conflict(theirs));
+    s.edit(doc("Morning, from my laptop"));
+    await vi.advanceTimersByTimeAsync(1000);
+    return { s, theirs, onReplace };
+  }
+
+  it("asks which version to keep when both devices edited, and waits", async () => {
+    const { s, theirs } = await bothEdited();
+    expect(s.status().conflict).toEqual(theirs);
+    expect(s.status().notSaved).toBeNull();
+
+    s.edit(doc("Morning, from my laptop!"));
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(server.sent).toHaveLength(1);
+    expect(saver(page(2)).restored).toEqual(doc("Morning, from my laptop!"));
+  });
+
+  it("Keep this version re-sends this device's writing over the other's", async () => {
+    const { s, onReplace } = await bothEdited();
+    s.keepMine();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(server.sent.at(-1)?.body).toEqual({
+      doc: doc("Morning, from my laptop"),
+      schemaVersion: 1,
+      baseVersion: 2,
+    });
+    expect(s.status().conflict).toBeNull();
+    expect(onReplace).not.toHaveBeenCalled();
+  });
+
+  it("Use the other swaps in the other device's version and drops this one", async () => {
+    const { s, theirs, onReplace } = await bothEdited();
+    s.takeTheirs();
+    expect(onReplace).toHaveBeenCalledWith(theirs.doc);
+    expect(s.status().conflict).toBeNull();
+    expect(saver(page(2)).restored).toBeNull();
+
+    s.edit(doc("Morning, from my phone. Then coffee."));
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(server.sent.at(-1)?.body.baseVersion).toBe(2);
+  });
+});

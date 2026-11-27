@@ -8,4 +8,6 @@ export const pageQuery = (day: string, notebook: string) =>
     queryFn: () => getPage(day, notebook),
     // The open editor owns the Page's content; saves write their result back here.
     staleTime: Number.POSITIVE_INFINITY,
+    // Switching back from another device: pick up its newer version (the saver decides).
+    refetchOnWindowFocus: "always",
   });

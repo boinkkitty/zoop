@@ -40,6 +40,9 @@ export function parseDoc(json: unknown): PMNode | null {
   }
 }
 
+// sameDoc compares two docs by content, ignoring key order (Postgres's JSONB reorders keys).
+export const sameDoc = (a: Doc, b: Doc) => sameJSON(a, b);
+
 function sameJSON(a: unknown, b: unknown): boolean {
   return JSON.stringify(sorted(a)) === JSON.stringify(sorted(b));
 }
