@@ -1,5 +1,5 @@
--- +goose Up
-CREATE TABLE users (
+-- Users, their sign-in identities, and sessions (#20). Up only; safe to apply twice.
+CREATE TABLE IF NOT EXISTS users (
     id                  uuid        PRIMARY KEY DEFAULT uuidv7(),
     -- Unique including Deactivated Accounts, so a closed email can't sign up again.
     email               text        NOT NULL UNIQUE CHECK (email = lower(email)),
@@ -14,7 +14,7 @@ CREATE TABLE users (
     deleted_at          timestamptz
 );
 
-CREATE TABLE auth_identities (
+CREATE TABLE IF NOT EXISTS auth_identities (
     id            uuid        PRIMARY KEY DEFAULT uuidv7(),
     user_id       uuid        NOT NULL REFERENCES users,
     provider      text        NOT NULL CHECK (provider IN ('google', 'password')),
@@ -26,7 +26,7 @@ CREATE TABLE auth_identities (
     CHECK ((provider = 'password') = (password_hash IS NOT NULL))
 );
 
-CREATE TABLE sessions (
+CREATE TABLE IF NOT EXISTS sessions (
     id           uuid        PRIMARY KEY DEFAULT uuidv7(),
     token_hash   bytea       NOT NULL UNIQUE,
     user_id      uuid        NOT NULL REFERENCES users,
@@ -34,9 +34,4 @@ CREATE TABLE sessions (
     last_seen_at timestamptz NOT NULL,
     expires_at   timestamptz NOT NULL
 );
-CREATE INDEX sessions_user_id ON sessions (user_id);
-
--- +goose Down
-DROP TABLE sessions;
-DROP TABLE auth_identities;
-DROP TABLE users;
+CREATE INDEX IF NOT EXISTS sessions_user_id ON sessions (user_id);
