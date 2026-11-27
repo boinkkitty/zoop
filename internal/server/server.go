@@ -17,12 +17,14 @@ import (
 	"github.com/boinkkitty/zoop/internal/auth"
 	"github.com/boinkkitty/zoop/internal/pages"
 	"github.com/boinkkitty/zoop/internal/ratelimit"
+	"github.com/boinkkitty/zoop/internal/search"
 )
 
 // Deps is what the router drives. internal/app builds it.
 type Deps struct {
 	Auth   *auth.Service
 	Pages  *pages.Service
+	Search *search.Service
 	Limits *ratelimit.RateLimiter
 	Ping   func(context.Context) error // backs /api/healthz
 	Assets fs.FS                       // the built frontend; must contain index.html
@@ -69,6 +71,7 @@ func New(d Deps) http.Handler {
 				signedIn.Put("/pages/{day}/{notebook}", putPage(d.Pages, rep))
 				signedIn.Get("/days", getMonth(d.Pages, rep))
 				signedIn.Get("/days/summary", getSummary(d.Pages, rep))
+				signedIn.Get("/search", getSearch(d.Search, rep))
 			})
 		})
 		api.NotFound(func(w http.ResponseWriter, r *http.Request) {

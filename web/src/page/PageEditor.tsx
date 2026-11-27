@@ -8,6 +8,9 @@ import { type Page, resendVerify } from "../api";
 import { type Notice, NoticePill } from "../notices/NoticePill";
 import { type ResendState, verifyEmailNotice } from "../notices/verifyEmail";
 import { railKey } from "../rail/queries";
+import { queryWords } from "../search/match";
+import search from "../search/Search.module.css";
+import { SearchHighlight, searchHighlightKey } from "../search/SearchHighlight";
 import { DayHead } from "./DayHead";
 import { editorOptions } from "./formatting";
 import type { Notebook } from "./notebooks";
@@ -31,6 +34,8 @@ export function PageEditor({
   today,
   timezone,
   accountNotices = [],
+  searchQuery = null,
+  onClearSearch = () => {},
 }: {
   page: Page;
   owner: string;
@@ -38,9 +43,13 @@ export function PageEditor({
   today: string;
   timezone: string;
   accountNotices?: Notice[]; // about the account rather than this Page
+  searchQuery?: string | null; // the search this Page was opened from: its matches are marked
+  onClearSearch?: () => void;
 }) {
   const queryClient = useQueryClient();
   const editorRef = useRef<Editor | null>(null);
+  const onClearSearchRef = useRef(onClearSearch);
+  onClearSearchRef.current = onClearSearch;
   const [saver] = useState(() =>
     createPageSaver({
       day: page.day,
@@ -73,6 +82,10 @@ export function PageEditor({
       ...documentExtensions(page.notebook),
       ...editorOptions.extensions,
       UndoRedo,
+      SearchHighlight.configure({
+        className: search.match,
+        currentClassName: search.current,
+      }),
       Placeholder.configure({
         placeholder: ({ pos }) => (pos === 0 ? words.first : ""),
         showOnlyCurrent: false,
@@ -90,7 +103,10 @@ export function PageEditor({
         "data-body-placeholder": words.body,
       },
     },
-    onUpdate: ({ editor }) => saver.edit(editor.getJSON() as Doc),
+    onUpdate: ({ editor }) => {
+      saver.edit(editor.getJSON() as Doc);
+      onClearSearchRef.current(); // typing clears the matches
+    },
     onBlur: () => saver.flush(),
   });
   editorRef.current = editor;
@@ -98,6 +114,8 @@ export function PageEditor({
   useEffect(() => {
     if (status.locked && editor.isEditable) editor.setEditable(false, false);
   }, [editor, status.locked]);
+
+  const matchWords = useSearchMatches(editor, searchQuery, onClearSearch);
 
   const notices = useSaverNotices(saver, status);
   const dayClosed = useDayClosedNotice(page, today, status.locked);
@@ -110,15 +128,52 @@ export function PageEditor({
   return (
     <>
       <NoticePill notices={notices} />
+      {searchQuery !== null && (
+        <div className={search.matchPill}>
+          <span>Matches for “{searchQuery.trim()}”</span>
+          <button type="button" onClick={onClearSearch}>
+            Clear · Esc
+          </button>
+        </div>
+      )}
       <DayHead
         page={page}
         today={today}
         timezone={timezone}
         readOnly={status.locked}
+        searchWords={matchWords}
       />
       <EditorContent editor={editor} className={styles.editor} />
     </>
   );
+}
+
+// useSearchMatches marks q's matches on the Page, scrolls the first to the middle of the
+// window, and clears them on Esc. It returns the words being marked.
+function useSearchMatches(
+  editor: Editor,
+  q: string | null,
+  onClear: () => void,
+): string[] {
+  const words = q === null ? [] : queryWords(q);
+  const key = words.join(" ");
+  useEffect(() => {
+    const ws = key ? key.split(" ") : [];
+    editor.view.dispatch(editor.state.tr.setMeta(searchHighlightKey, ws));
+    if (ws.length > 0)
+      editor.view.dom
+        .querySelector("[data-search-match]")
+        ?.scrollIntoView({ block: "center" });
+  }, [editor, key]);
+  useEffect(() => {
+    if (q === null) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClear();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [q, onClear]);
+  return words;
 }
 
 // The Day closed Notice: on yesterday's Page once it's read only, until dismissed for that Day.

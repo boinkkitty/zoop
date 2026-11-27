@@ -1,0 +1,287 @@
+/* Search in the sidebar and on the opened Page, after the "Search results UI" prototype
+   (.scratch/journal-v1/prototypes/search-results-PROTOTYPE.html, A + H2, blue matches). */
+
+.box {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  margin-top: 8px;
+  padding: 0 8px 0 10px;
+  border-radius: 9px;
+  background: #e8e8ed;
+  color: #a1a1a6;
+  font-size: 12.5px;
+  cursor: text;
+  transition:
+    box-shadow 0.15s,
+    background 0.15s;
+}
+
+.box:focus-within {
+  background: #fff;
+  box-shadow:
+    0 0 0 3px rgb(10 132 255 / 25%),
+    0 0 0 1px rgb(10 132 255 / 60%);
+}
+
+.box input {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  font: inherit;
+  color: var(--color-ink);
+}
+
+.box input::-webkit-search-cancel-button {
+  display: none;
+}
+
+.box kbd {
+  flex: none;
+  padding: 0 4px;
+  border: 1px solid #d1d1d6;
+  border-bottom-width: 1.5px;
+  border-radius: 5px;
+  font: 500 10.5px system-ui;
+  line-height: 15px;
+  color: #a1a1a6;
+}
+
+.box:focus-within kbd,
+.box.has kbd {
+  display: none;
+}
+
+.clear {
+  flex: none;
+  width: 15px;
+  height: 15px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: #c7c7cc;
+  color: #fff;
+  font-size: 11px;
+  line-height: 15px;
+  cursor: pointer;
+}
+
+.spin {
+  flex: none;
+  width: 12px;
+  height: 12px;
+  border: 1.5px solid #d1d1d6;
+  border-top-color: var(--color-muted);
+  border-radius: 50%;
+  animation: rot 0.7s linear infinite;
+}
+
+@keyframes rot {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ---------- results, in place of the rail ---------- */
+
+.results {
+  position: absolute;
+  inset: 0;
+  overflow-y: auto;
+  padding: 0 12px 110px 18px;
+  scrollbar-width: none;
+}
+
+.results::-webkit-scrollbar {
+  display: none;
+}
+
+.caption {
+  margin: 0;
+  padding: 10px 2px 2px 11px;
+  font-size: 11px;
+  color: #a1a1a6;
+}
+
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.month {
+  top: 0;
+  padding-left: 11px;
+}
+
+.stale {
+  opacity: 0.45;
+  transition: opacity 0.15s;
+}
+
+.result {
+  position: relative;
+  display: block;
+  width: 100%;
+  padding: 9px 11px 10px;
+  border: 0;
+  border-radius: 10px;
+  background: none;
+  font: inherit;
+  color: var(--color-ink);
+  text-align: left;
+  cursor: pointer;
+}
+
+.result:hover {
+  background: rgb(0 0 0 / 4%);
+}
+
+.result.active {
+  background: rgb(0 0 0 / 7.5%);
+}
+
+.result.open::before {
+  content: "";
+  position: absolute;
+  left: 3px;
+  top: 11px;
+  bottom: 11px;
+  width: 3px;
+  border-radius: 2px;
+  background: #0a84ff;
+}
+
+.head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 3px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.day {
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+
+.notebook {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #a1a1a6;
+}
+
+.title {
+  display: block;
+  margin-bottom: 2px;
+  overflow: hidden;
+  font-size: 12.5px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.snippet {
+  display: -webkit-box;
+  overflow: hidden;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: #3a3a3c;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+}
+
+.result mark,
+.dateMatch {
+  padding: 0 1px;
+  border-radius: 3px;
+  background: rgb(10 132 255 / 17%);
+  color: inherit;
+  font-weight: 600;
+}
+
+.message {
+  margin: 0;
+  padding: 26px 12px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  text-align: center;
+  color: var(--color-muted);
+}
+
+.message b {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 13.5px;
+  color: var(--color-ink);
+}
+
+.end {
+  margin: 0;
+  padding: 12px 0 4px;
+  font-size: 11px;
+  text-align: center;
+  color: #a1a1a6;
+}
+
+.placeholder {
+  height: 58px;
+  margin: 0 0 6px;
+  border-radius: 10px;
+  background: linear-gradient(90deg, #ececf0 0%, #f6f6f8 50%, #ececf0 100%);
+  background-size: 200% 100%;
+  animation: shimmer 1.1s linear infinite;
+}
+
+@keyframes shimmer {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
+}
+
+/* ---------- on the opened Page ---------- */
+
+.match {
+  border-radius: 3px;
+  background: rgb(10 132 255 / 17%);
+}
+
+.match.current {
+  background: rgb(10 132 255 / 38%);
+  box-shadow: 0 0 0 2px rgb(10 132 255 / 38%);
+}
+
+.matchPill {
+  position: sticky;
+  top: 8px;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: max-content;
+  margin: -40px -60px 16px auto;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: #e8f1ff;
+  color: var(--color-muted);
+  font-size: 11px;
+}
+
+.matchPill button {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--color-muted);
+  font: 600 11px system-ui;
+  cursor: pointer;
+}

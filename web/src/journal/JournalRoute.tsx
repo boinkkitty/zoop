@@ -3,7 +3,7 @@ import {
   useQueryClient,
   useSuspenseQuery,
 } from "@tanstack/react-query";
-import { createLazyRoute } from "@tanstack/react-router";
+import { createLazyRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { type Me, setTimezone } from "../api";
 import type { Notice } from "../notices/NoticePill";
@@ -27,6 +27,17 @@ function JournalRoute() {
   const { data: me } = useSuspenseQuery(meQuery);
   const { data: page } = useSuspenseQuery(pageQuery(day, notebook));
   const timezone = useTimezoneNotice(me);
+  const navigate = useNavigate();
+  // The query a search result was opened with, kept until the user moves on from its matches.
+  const [opened, setOpened] = useState<{
+    day: string;
+    notebook: string;
+    q: string;
+  } | null>(null);
+  const searchQuery =
+    opened && opened.day === day && opened.notebook === notebook
+      ? opened.q
+      : null;
   const [dialog, setDialog] = useDialog();
   const openIf = (name: Dialog) => (open: boolean) =>
     setDialog(open ? name : null);
@@ -37,6 +48,13 @@ function JournalRoute() {
         me={me}
         day={day}
         notebook={notebook}
+        onOpenResult={(r, q) => {
+          setOpened({ day: r.day, notebook: r.notebook, q });
+          void navigate({
+            to: "/day/$day/$notebook",
+            params: { day: r.day, notebook: r.notebook },
+          });
+        }}
         onOpenSettings={() => setDialog("settings")}
       />
       <main className={styles.desk}>
@@ -52,6 +70,8 @@ function JournalRoute() {
             today={me.today}
             timezone={me.timezone}
             accountNotices={timezone ? [timezone] : []}
+            searchQuery={searchQuery}
+            onClearSearch={() => setOpened(null)}
           />
           <NotebookIndex day={page.day} active={page.notebook} />
         </article>

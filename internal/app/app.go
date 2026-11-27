@@ -21,6 +21,7 @@ import (
 	"github.com/boinkkitty/zoop/internal/pages"
 	"github.com/boinkkitty/zoop/internal/postgres"
 	"github.com/boinkkitty/zoop/internal/ratelimit"
+	"github.com/boinkkitty/zoop/internal/search"
 	"github.com/boinkkitty/zoop/internal/server"
 )
 
@@ -84,6 +85,7 @@ func New(d Deps) http.Handler {
 			Mailer: d.Mailer, AppURL: d.AppURL,
 		}),
 		Pages:  pages.New(postgres.NewPageStore(d.DB), d.Clock),
+		Search: search.New(postgres.NewSearchStore(d.DB)),
 		Limits: limits,
 		Ping:   postgres.Ping(d.DB),
 		Assets: d.Assets,

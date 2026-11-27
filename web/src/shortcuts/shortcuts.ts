@@ -36,6 +36,7 @@ export const shortcutGroups: ShortcutGroup[] = [
     title: "Other",
     shortcuts: [
       { label: "Paste as plain text", keys: ["Mod", "Shift", "V"] },
+      { label: "Search", keys: ["Mod", "K"] },
       { label: "Show these shortcuts", keys: ["Mod", "/"] },
       { label: "Open Settings", keys: ["Mod", ","] },
     ],
