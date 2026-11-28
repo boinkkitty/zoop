@@ -98,3 +98,13 @@
 .switch a {
   color: var(--color-ink);
 }
+
+.privacy {
+  margin: 4px 0 0;
+  font-size: 13px;
+  text-align: center;
+}
+
+.privacy a {
+  color: var(--color-muted);
+}

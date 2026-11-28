@@ -13,7 +13,7 @@ import { useSearch } from "../search/queries";
 import { moveActive } from "../search/results";
 import search from "../search/Search.module.css";
 import { SearchResults } from "../search/SearchResults";
-import { isMac } from "../shortcuts/shortcuts";
+import { isMac, isSearchShortcut } from "../shortcuts/shortcuts";
 import { Island } from "./Island";
 import { railQuery, summaryQuery } from "./queries";
 import styles from "./Rail.module.css";
@@ -28,22 +28,29 @@ const monthLabel = (month: string) =>
   monthName.format(new Date(`${month}-01T00:00:00Z`));
 
 // The left sidebar: Today, Settings, search, a divider, and the Island rail with its scrubber.
-// While there's a query, search results take the rail's place.
+// While there's a query, search results take the rail's place. The query is kept by
+// the caller, so it outlives the narrow-window drawer closing. onChoose runs on choosing
+// a Day or a result, which closes that drawer.
 export function Sidebar({
   me,
   day,
   notebook,
+  query: q,
+  onQueryChange: setQ,
   onOpenResult,
   onOpenSettings,
+  onChoose = () => {},
 }: {
   me: Me;
   day: string;
   notebook: string;
+  query: string;
+  onQueryChange: (q: string) => void;
   onOpenResult: (r: SearchResult, q: string) => void;
   onOpenSettings: () => void;
+  onChoose?: () => void;
 }) {
   const navigate = useNavigate();
-  const [q, setQ] = useState("");
   const found = useSearch(q);
   const [active, setActive] = useState(0);
   // The result last opened from search: it keeps a bar while its Page is open.
@@ -61,8 +68,13 @@ export function Sidebar({
   const railRef = useRef<HTMLElement>(null);
   const [inView, setInView] = useState(thisMonth);
 
-  const open = (d: string) =>
-    navigate({ to: "/day/$day/$notebook", params: { day: d, notebook } });
+  const open = (d: string) => {
+    onChoose();
+    return navigate({
+      to: "/day/$day/$notebook",
+      params: { day: d, notebook },
+    });
+  };
 
   const toToday = () => {
     setAnchor(thisMonth);
@@ -78,8 +90,7 @@ export function Sidebar({
   // ⌘K (Ctrl+K off a Mac) focuses search from anywhere.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      const mod = isMac() ? e.metaKey : e.ctrlKey;
-      if (!mod || e.altKey || e.key.toLowerCase() !== "k") return;
+      if (!isSearchShortcut(e)) return;
       e.preventDefault();
       box.current?.focus();
       box.current?.select();
@@ -94,6 +105,7 @@ export function Sidebar({
     setActive(index);
     setOpened(`${r.day}/${r.notebook}`);
     box.current?.blur();
+    onChoose();
     onOpenResult(r, found.settled);
   };
 
@@ -172,7 +184,7 @@ export function Sidebar({
         </label>
       </nav>
       <div className={styles.divider} />
-      <div className={styles.railWrap}>
+      <div className={styles.railWrap} data-coach="rail">
         {searching ? (
           <SearchResults
             q={found.settled}
@@ -242,6 +254,9 @@ function Rail({
   onMonthInView: (month: string) => void;
 }) {
   const q = useInfiniteQuery(railQuery(anchor));
+  // Until the first Written Day, the rail's end explains what Islands are.
+  const { data: summary } = useQuery(summaryQuery);
+  const noWrittenDay = summary?.months.every((m) => m.writtenDays === 0);
   const top = useRef<HTMLDivElement>(null);
   const bottom = useRef<HTMLDivElement>(null);
   // Newer months load above what's on screen: keep it from jumping down.
@@ -348,15 +363,28 @@ function Rail({
         {q.isPending || q.hasNextPage ? (
           <Shimmer />
         ) : (
-          <p className={styles.railEnd}>
-            You started here ·{" "}
-            {new Date(`${me.firstDay}T00:00:00Z`).toLocaleDateString("en-GB", {
-              day: "numeric",
-              month: "long",
-              year: "numeric",
-              timeZone: "UTC",
-            })}
-          </p>
+          <>
+            <p className={styles.railEnd}>
+              You started here ·{" "}
+              {me.firstDay === me.today
+                ? "today"
+                : new Date(`${me.firstDay}T00:00:00Z`).toLocaleDateString(
+                    "en-GB",
+                    {
+                      day: "numeric",
+                      month: "long",
+                      year: "numeric",
+                      timeZone: "UTC",
+                    },
+                  )}
+            </p>
+            {noWrittenDay && (
+              <p className={styles.railHint}>
+                Every Day gets an Island here. Its Title is the first line you
+                write.
+              </p>
+            )}
+          </>
         )}
       </div>
     </nav>

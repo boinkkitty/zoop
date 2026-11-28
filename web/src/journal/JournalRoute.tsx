@@ -6,6 +6,7 @@ import {
 import { createLazyRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { type Me, setTimezone } from "../api";
+import { CoachMarks, useCoachMarks } from "../firstrun/CoachMarks";
 import type { Notice } from "../notices/NoticePill";
 import { keepTimezone, timezoneNotice } from "../notices/timezone";
 import { PageEditor } from "../page/PageEditor";
@@ -14,7 +15,12 @@ import { Sidebar } from "../rail/Sidebar";
 import { meQuery } from "../router";
 import { DeactivateDialog, SettingsDialog } from "../settings/SettingsDialog";
 import { ShortcutSheet } from "../shortcuts/ShortcutSheet";
-import { isSettingsShortcut, isSheetShortcut } from "../shortcuts/shortcuts";
+import {
+  isSearchShortcut,
+  isSettingsShortcut,
+  isSheetShortcut,
+} from "../shortcuts/shortcuts";
+import { Drawer, useNarrow } from "./Drawer";
 import styles from "./JournalRoute.module.css";
 import { NotebookIndex } from "./NotebookIndex";
 
@@ -38,25 +44,47 @@ function JournalRoute() {
     opened && opened.day === day && opened.notebook === notebook
       ? opened.q
       : null;
+  // Kept here so the query (and its results) are still there when the drawer reopens.
+  const [query, setQuery] = useState("");
+  const coach = useCoachMarks();
   const [dialog, setDialog] = useDialog();
   const openIf = (name: Dialog) => (open: boolean) =>
     setDialog(open ? name : null);
+  const narrow = useNarrow();
+  const drawer = useDrawer(narrow, dialog !== null);
+
+  const sidebar = (
+    <Sidebar
+      me={me}
+      day={day}
+      notebook={notebook}
+      query={query}
+      onQueryChange={setQuery}
+      onOpenResult={(r, q) => {
+        setOpened({ day: r.day, notebook: r.notebook, q });
+        void navigate({
+          to: "/day/$day/$notebook",
+          params: { day: r.day, notebook: r.notebook },
+        });
+      }}
+      onOpenSettings={() => setDialog("settings")}
+      onChoose={drawer.close}
+    />
+  );
 
   return (
-    <div className={styles.app}>
-      <Sidebar
-        me={me}
-        day={day}
-        notebook={notebook}
-        onOpenResult={(r, q) => {
-          setOpened({ day: r.day, notebook: r.notebook, q });
-          void navigate({
-            to: "/day/$day/$notebook",
-            params: { day: r.day, notebook: r.notebook },
-          });
-        }}
-        onOpenSettings={() => setDialog("settings")}
-      />
+    <div className={`${styles.app} ${narrow ? styles.narrow : ""}`}>
+      {narrow ? (
+        <Drawer
+          open={drawer.open}
+          onOpenChange={drawer.setOpen}
+          focusSearch={drawer.focusSearch}
+        >
+          {sidebar}
+        </Drawer>
+      ) : (
+        sidebar
+      )}
       <main className={styles.desk}>
         <header className={styles.bar}>
           <span>{me.email}</span>
@@ -72,9 +100,16 @@ function JournalRoute() {
             accountNotices={timezone ? [timezone] : []}
             searchQuery={searchQuery}
             onClearSearch={() => setOpened(null)}
+            onEdit={coach.step === null ? undefined : coach.end}
           />
           <NotebookIndex day={page.day} active={page.notebook} />
         </article>
+        <CoachMarks
+          step={coach.step}
+          target={narrow ? (m) => (m === "rail" ? "menu" : m) : undefined}
+          onNext={coach.next}
+          onSkip={coach.end}
+        />
         <SettingsDialog
           me={me}
           open={dialog === "settings"}
@@ -97,6 +132,32 @@ function JournalRoute() {
 }
 
 type Dialog = "settings" | "shortcuts" | "deactivate";
+
+// useDrawer is the narrow-window drawer's state. ⌘K opens it with search focused (once
+// open, the Sidebar's own ⌘K handles it), and it closes before any dialog opens.
+function useDrawer(narrow: boolean, dialogOpen: boolean) {
+  const [state, setState] = useState({ open: false, focusSearch: false });
+  useEffect(() => {
+    if (!narrow || state.open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (!isSearchShortcut(e)) return;
+      e.preventDefault();
+      setState({ open: true, focusSearch: true });
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [narrow, state.open]);
+  useEffect(() => {
+    if (dialogOpen) setState({ open: false, focusSearch: false });
+  }, [dialogOpen]);
+
+  return {
+    open: narrow && state.open,
+    focusSearch: state.focusSearch,
+    setOpen: (open: boolean) => setState({ open, focusSearch: false }),
+    close: () => setState({ open: false, focusSearch: false }),
+  };
+}
 
 // useDialog is the one dialog open, if any, so they never stack. ⌘, toggles Settings and ⌘/ the
 // shortcut sheet, from anywhere in the signed-in app; either replaces whatever else is open.

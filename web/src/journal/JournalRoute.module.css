@@ -49,3 +49,8 @@
     padding: 40px 80px 56px 28px;
   }
 }
+
+/* The sidebar is in the drawer: room on the left for its menu button. */
+.narrow .desk {
+  padding-left: 64px;
+}

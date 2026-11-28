@@ -12,7 +12,7 @@ export function NotebookIndex({
   active: Notebook;
 }) {
   return (
-    <nav className={styles.index} aria-label="Notebooks">
+    <nav className={styles.index} aria-label="Notebooks" data-coach="notebooks">
       {NOTEBOOKS.map(({ slug, name }) => (
         <Link
           key={slug}

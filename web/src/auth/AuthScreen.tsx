@@ -103,6 +103,9 @@ export function AuthScreen({
         <p className={styles.switch}>
           {text.switchPrompt} <Link to={text.switchTo}>{text.switchLink}</Link>
         </p>
+        <p className={styles.privacy}>
+          <Link to="/privacy">Privacy</Link>
+        </p>
       </form>
     </main>
   );
